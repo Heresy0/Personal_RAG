@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "personal-memory",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "查询个人知识库、原样保存、总结后存入，并关联保存原图与识别文字。",
   "author": {"name": "Heresy0"},
   "repository": "https://github.com/Heresy0/Personal_RAG",
@@ -11,7 +11,7 @@
       "interface": {
         "displayName": "个人知识库",
         "shortDescription": "查询、原样保存、总结后存入",
-        "longDescription": "在任意本地项目会话中按需查询个人记录、保留原文，或自然总结后存入自己的知识库。无需固定模板，由本机Docker MCP服务执行。",
+        "longDescription": "在本地项目会话中查询、原样保存或自由总结后存入。图片采用AI识别、人工核对、原图与最终文字关联保存的流程，支持查询后回看原图；项目不自动OCR。由本机Docker MCP服务执行，无需固定模板。",
         "developerName": "Heresy0",
         "category": "Productivity",
         "capabilities": ["Read", "Write"],
