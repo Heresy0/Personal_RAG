@@ -31,6 +31,7 @@ class Settings:
     rerank_url: str = ""
     rerank_model: str = ""
     rerank_api_key: str = field(default="", repr=False)
+    audit_dir: Path | None = None
 
     @classmethod
     def load(cls):
@@ -49,7 +50,10 @@ class Settings:
                  "rerank_url", "rerank_model", "rerank_api_key"]
         values = {key: os.environ.get(prefix + key.upper(), "disabled" if key == "embedding_provider" else "")
                   for key in names}
-        return cls(url, vault.resolve(), dimensions, **values)
+        audit_dir = Path(os.environ.get(prefix + "AUDIT_DIR", str(vault.parent / 'logs')))
+        if not audit_dir.is_absolute():
+            audit_dir = ROOT / audit_dir
+        return cls(url, vault.resolve(), dimensions, **values, audit_dir=audit_dir.resolve())
 
 
 @dataclass(frozen=True)

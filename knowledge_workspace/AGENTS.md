@@ -14,6 +14,8 @@
 - 追加前读取 revision；冲突重新读取。生成一次 request_id，失败重试沿用，避免重复记录。
 - 手动编辑/导入文件后用 sync_notes。导入放在 vault/<空间>/ 下；扫描PDF需要另行OCR。
 - 删除使用 archive_note，将原件移入可恢复回收目录。用户明确要求归档才执行。
+- 查询写入历史使用 list_write_audit，按 note_id、operation_id 或 outcome 分页；读取前后正文使用 read_note_version。二者仅全空间管理连接可用。
+- 失败先核对审计：committed_error 表示已提交但返回失败；started/unknown 须用 operation_id 对照变更事件、应急日志和原件。不得直接当作失败重写；capture 重试仍沿用原 request_id。
 - 不读取其他 Codex 聊天，不自动收集其他项目源码、秘密或整段聊天。
 
 ## 可用指令示例

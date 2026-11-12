@@ -28,7 +28,7 @@ def main():
         raise SystemExit('只允许本项目独立数据库')
     name = 'personal_rag_test_plugin_' + uuid4().hex[:10]
     admin = urlunsplit(parsed._replace(path='/postgres'))
-    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.2.0')
+    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.3.0')
     launcher = Path(os.environ.get('PERSONAL_RAG_TEST_LAUNCHER',
                     str(ROOT / 'plugins/personal-memory/scripts/start-memory.ps1')))
     assert launcher.is_file()
@@ -38,6 +38,7 @@ def main():
         with TemporaryDirectory(prefix='plugin-test-', dir=ROOT / 'output') as temporary:
             root = Path(temporary)
             (root / 'knowledge_workspace/vault').mkdir(parents=True)
+            (root / 'logs').mkdir()
             (root / 'config/connections').mkdir(parents=True)
             (root / '.env').write_text('PERSONAL_RAG_DB_PASSWORD=' + parsed.password +
                 '\nPERSONAL_RAG_EMBEDDING_PROVIDER=disabled\nPERSONAL_RAG_EMBEDDING_DIMENSIONS=3\n', encoding='utf-8')

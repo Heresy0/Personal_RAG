@@ -65,6 +65,19 @@ def create_server(service: MemoryService):
             """用户要求时追加原文；先read_note取得expected_revision，冲突后重新读取。"""
             return call(service.append, note_id, text, expected_revision)
 
+    if service.policy.admin:
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True))
+        def list_write_audit(note_id: str | None = None, operation_id: str | None = None,
+                             outcome: str | None = None, limit: int = 50, offset: int = 0) -> dict:
+            """管理专用：分页查询写入尝试和已提交变更，含结果、前后版本；正文请读取历史版本。"""
+            return call(service.list_audit, note_id=note_id, operation_id=operation_id,
+                        outcome=outcome, limit=limit, offset=offset)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True))
+        def read_note_version(note_id: str, revision: int) -> dict:
+            """管理专用：读取完整历史正文及元数据，包括已归档或清理笔记。"""
+            return call(service.read_version, note_id, revision)
+
     if service.policy.admin and service.policy.maximum_mode == "readwrite":
         @server.tool()
         def sync_notes(prune: bool = False) -> dict:

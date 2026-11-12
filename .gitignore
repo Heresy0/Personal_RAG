@@ -22,6 +22,7 @@ secrets/
 *.sqlite-*
 *.db
 *.log
+logs/
 output/
 knowledge_workspace/vault/*
 !knowledge_workspace/vault/.gitkeep

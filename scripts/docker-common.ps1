@@ -12,7 +12,7 @@ function Initialize-RagDockerEnvironment {
         $ragTemplate += "`nPERSONAL_RAG_DB_PASSWORD=$ragPassword`n"
         [IO.File]::WriteAllText($ragEnvPath, $ragTemplate)
     }
-    foreach ($ragRelative in @('knowledge_workspace/vault', 'config/connections', 'connections')) {
+    foreach ($ragRelative in @('knowledge_workspace/vault', 'config/connections', 'connections', 'logs')) {
         [void][IO.Directory]::CreateDirectory((Join-Path $RagRoot $ragRelative))
     }
 }

@@ -39,7 +39,7 @@ def test_database():
 def db_settings(test_database, tmp_path):
     settings = Settings(test_database, tmp_path / "vault", dimensions=3)
     with Database(settings).connect() as conn:
-        conn.execute("TRUNCATE notes CASCADE")
+        conn.execute("TRUNCATE note_versions, write_audit, notes CASCADE")
     return settings
 
 

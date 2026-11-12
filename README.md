@@ -9,7 +9,7 @@
 先在PowerShell 7中初始化后端，再安装：
 
 ```powershell
-.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.2.0
+.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.3.0
 .\scripts\install-plugin.ps1
 ```
 
@@ -47,12 +47,12 @@
 .\scripts\setup-docker.ps1
 ```
 
-脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.2.0`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
+脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.3.0`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
 
 也可单独拉取：
 
 ```powershell
-docker pull ghcr.io/heresy0/personal_rag:0.2.0
+docker pull ghcr.io/heresy0/personal_rag:0.3.0
 ```
 
 需要本地构建时使用 `.\scripts\setup-docker.ps1 -Build`。可在 `.env` 中设置 `PERSONAL_RAG_IMAGE` 指定其他镜像或固定digest。
@@ -154,7 +154,7 @@ docker compose up -d --wait postgres
 如需从工具目录完全移除，把目标项目配置的 `enabled` 改成 `false` 后重启会话。
 关闭不撤回已经进入聊天上下文的资料，也不取消已经开始的请求。
 
-这是本地 MCP 集成，未安装为 Codex 插件市场包，未自动注册全局连接。云端聊天不会自动获得本机服务。
+本节是可选的手动 MCP 接入方式；使用前面的插件安装方式即可在＋号选择，无需逐项目配置。云端聊天不会自动获得本机服务。
 
 ## 模型
 
@@ -169,8 +169,11 @@ rerank 使用完整 `/rerank` 接口地址，接受 `model/query/documents/top_n
 
 ## 数据与可靠性
 
+0.3.0新增[写入审计与历史版本](docs/WRITE_AUDIT.md)：记录知识写入成功、失败、拒绝与前后版本；管理会话可查询，普通项目插件不暴露全库日志。已有部署请先备份，再运行 `scripts/setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.3.0` 完成数据库迁移。
+
 - `notes`：稳定 ID、空间、日期、标签、来源、修订号与文件哈希。
 - `note_versions`：记录写入/同步后的历史正文及元数据。
+- `write_audit`：每次写入尝试与同事务提交的变更事件，保留结果、连接、操作ID和前后版本；归档与清理也保留历史。
 - `chunks`：检索子块及 pgvector 向量；`parents`：按章节组织的原文父块。
 - 来源类型 `original` / `summary`，AI 整理稿通过 `source_ids` 链接原始笔记。
 - 关键词 BM25 仅在授权空间和日期范围内构建；向量查询同样先加范围条件；RRF 0.6/0.4 融合，可选重排，父块返回受12000字符预算限制。

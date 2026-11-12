@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 import psycopg
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 
+from .audit import current_labels
 from .config import Settings
 
 
@@ -30,6 +32,9 @@ class Database:
         try:
             register_vector(conn)
             conn.execute("SET statement_timeout = '15s'")
+            labels = current_labels()
+            if labels:
+                conn.execute("SELECT set_config('personal_rag.audit_context',%s,false)", [json.dumps(labels)])
             conn.commit()
             return conn
         except Exception:

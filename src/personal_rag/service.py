@@ -16,6 +16,7 @@ from .db import Database
 from .embeddings import Embeddings
 from .parsing import decode_note, encode_note, parents_for, parse
 from .retrieval import fuse, keyword_rank, rerank
+from .audit import AuditStore, audited_write, observe_note, identify_note
 
 
 def digest(data: bytes):
@@ -27,6 +28,7 @@ class MemoryService:
         self.settings, self.policy = settings, policy
         self.mode = policy.initial_mode
         self.db = Database(settings)
+        self.audit = AuditStore(self.db, settings)
         self.embeddings = embeddings if embeddings is not None else Embeddings(settings)
 
     def status(self):
@@ -115,10 +117,6 @@ class MemoryService:
         return chunks, vectors
 
     def _index(self, conn, note_id, prepared):
-        conn.execute("""INSERT INTO note_versions(note_id,revision,body,metadata)
-            SELECT id,revision,body,jsonb_build_object('title',title,'space',space,'tags',tags,
-              'event_date',event_date,'source_type',source_type,'source_ids',source_ids,'relative_path',relative_path)
-            FROM notes WHERE id=%s ON CONFLICT DO NOTHING""", [note_id])
         chunks, vectors = prepared
         conn.execute("DELETE FROM chunks WHERE note_id=%s", [note_id])
         conn.execute("DELETE FROM parents WHERE note_id=%s", [note_id])
@@ -154,6 +152,7 @@ class MemoryService:
                 "event_date": row["event_date"].isoformat(), "tags": row["tags"],
                 "source_type": row["source_type"], "source_ids": row["source_ids"]}
 
+    @audited_write('capture')
     def capture(self, title: str, body: str, space: str, *, event_date: str | None = None,
                 tags: list[str] | None = None, source_type="original", source_ids: list[str] | None = None,
                 request_id: str | None = None):
@@ -168,6 +167,7 @@ class MemoryService:
             raise ValueError("标签最多30个，每个1到80字符")
         day = date.fromisoformat(event_date) if event_date else datetime.now(ZoneInfo("Asia/Shanghai")).date()
         note_id = uuid5(NAMESPACE_URL, f"personal-rag:{space}:{UUID(request_id)}") if request_id else uuid4()
+        identify_note(note_id, space)
         sources = [str(UUID(s)) for s in (source_ids or [])]
         row = {"id": note_id, "space": space, "title": title, "body": body, "tags": tags,
                "event_date": day, "source_type": source_type, "source_ids": sources}
@@ -178,6 +178,7 @@ class MemoryService:
         with self.db.connect() as conn:
             existing = conn.execute("SELECT * FROM notes WHERE id=%s", [note_id]).fetchone()
             if existing:
+                observe_note(existing)
                 if existing["deleted"] or any(existing[k] != row[k] for k in ("space", "title", "body", "tags", "event_date", "source_type", "source_ids")):
                     raise ValueError("request_id 已用于不同内容或已删除记录")
                 return self._public(existing)
@@ -188,7 +189,9 @@ class MemoryService:
         try:
             with self.db.connect() as conn:
                 conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(note_id)])
-                if conn.execute("SELECT id FROM notes WHERE id=%s", [note_id]).fetchone():
+                concurrent = conn.execute("SELECT * FROM notes WHERE id=%s", [note_id]).fetchone()
+                if concurrent:
+                    observe_note(concurrent)
                     raise ValueError("并发重复记录，请用相同 request_id 重试")
                 if path.exists():
                     raise ValueError("目标文件已存在，请先 sync")
@@ -209,12 +212,14 @@ class MemoryService:
             raise
         return self.read(str(note_id))
 
+    @audited_write('append')
     def append(self, note_id: str, text: str, expected_revision: int):
         self.guard(write=True)
         if not text.strip() or len(text) > 100000:
             raise ValueError("追加内容须为1到100000字符")
         with self.db.connect() as conn:
             row = self._get(conn, note_id)
+        observe_note(row)
         self.guard(write=True, space=row["space"])
         if row["revision"] != expected_revision or not self._current_file(row):
             raise ValueError("版本冲突，请先读取最新原文")
@@ -232,6 +237,7 @@ class MemoryService:
             with self.db.connect() as conn:
                 conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(row["id"])])
                 current = self._get(conn, note_id)
+                observe_note(current)
                 if current["revision"] != expected_revision or not self._current_file(current):
                     raise ValueError("并发修改，请先重新读取")
                 conn.execute("UPDATE notes SET body=%s,file_hash=%s,revision=revision+1,updated_at=now() WHERE id=%s",
@@ -308,6 +314,7 @@ class MemoryService:
         return {"results": [self._public(row) for row in rows[:limit] if self._current_file(row)],
                 "next_offset": offset + limit if len(rows) > limit else None}
 
+    @audited_write('sync')
     def sync(self, *, prune=False):
         self.guard(write=True, admin=True)
         root = self.settings.vault.resolve()
@@ -324,15 +331,30 @@ class MemoryService:
         if prune and not report["errors"]:
             where, params = self._scope()
             with self.db.connect() as conn:
-                rows = conn.execute(f"SELECT n.* FROM notes n WHERE {where} AND NOT n.deleted", params).fetchall()
-                for row in rows:
-                    if not self._path(row["relative_path"]).exists():
-                        conn.execute("UPDATE notes SET deleted=true,revision=revision+1,updated_at=now() WHERE id=%s", [row["id"]])
-                        conn.execute("DELETE FROM chunks WHERE note_id=%s", [row["id"]])
-                        conn.execute("DELETE FROM parents WHERE note_id=%s", [row["id"]])
-                        report["removed"] += 1
+                rows = conn.execute(f"SELECT n.id FROM notes n WHERE {where} AND NOT n.deleted", params).fetchall()
+            for row in rows:
+                try:
+                    if self._prune_one(str(row['id'])):
+                        report['removed'] += 1
+                except Exception as error:
+                    report['errors'].append({'note_id':str(row['id']), 'error':type(error).__name__, 'message':'清理失败，请检查审计记录'})
         return report
 
+    @audited_write('prune')
+    def _prune_one(self, note_id):
+        self.guard(write=True, admin=True)
+        with self.db.connect() as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(UUID(note_id))])
+            row = self._get(conn, note_id)
+            observe_note(row)
+            if self._path(row['relative_path']).exists():
+                return False
+            conn.execute("UPDATE notes SET deleted=true,revision=revision+1,updated_at=now() WHERE id=%s", [row['id']])
+            conn.execute("DELETE FROM chunks WHERE note_id=%s", [row['id']])
+            conn.execute("DELETE FROM parents WHERE note_id=%s", [row['id']])
+            return True
+
+    @audited_write('sync_file')
     def _sync_one(self, path):
         relative = str(path.relative_to(self.settings.vault)).replace("\\", "/")
         path = self._path(relative)
@@ -364,6 +386,7 @@ class MemoryService:
                 if len(missing) == 1:
                     existing = missing[0]
             if existing:
+                observe_note(existing)
                 self.guard(write=True, space=existing["space"])
                 if existing["space"] != space:
                     raise ValueError("跨空间移动须另建记录并明确来源")
@@ -374,6 +397,7 @@ class MemoryService:
                     return "unchanged"
             snapshot_revision = existing["revision"] if existing else None
         note_id = existing["id"] if existing else UUID(metadata["id"]) if metadata.get("id") else uuid4()
+        identify_note(note_id, space)
         title = metadata.get("title", path.stem)
         prepared = self._prepare(path, body, title)
         if body is None:
@@ -389,6 +413,7 @@ class MemoryService:
         with self.db.connect() as conn:
             conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(note_id)])
             current = conn.execute("SELECT * FROM notes WHERE id=%s", [note_id]).fetchone()
+            observe_note(current)
             if (current["revision"] if current else None) != snapshot_revision or digest(path.read_bytes()) != file_hash:
                 raise ValueError("索引期间原文或版本发生变化，请重试")
             for source in sources:
@@ -402,6 +427,7 @@ class MemoryService:
             self._index(conn, note_id, prepared)
         return "indexed"
 
+    @audited_write('archive')
     def archive(self, note_id: str, expected_revision: int):
         self.guard(write=True, admin=True)
         moved = False
@@ -410,6 +436,7 @@ class MemoryService:
             with self.db.connect() as conn:
                 conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(UUID(note_id))])
                 row = self._get(conn, note_id)
+                observe_note(row)
                 if row["revision"] != expected_revision or not self._current_file(row):
                     raise ValueError("版本冲突，请先读取原文")
                 original = self._path(row["relative_path"])
@@ -428,3 +455,44 @@ class MemoryService:
                         os.replace(trash, original)
             raise
         return {"archived": note_id, "recoverable_file": str(trash)}
+
+    def list_audit(self, *, note_id=None, operation_id=None, outcome=None, limit=50, offset=0):
+        self.guard(admin=True)
+        if '*' not in self.policy.spaces:
+            raise PermissionError('全局审计需要全空间管理权限')
+        if not 1 <= limit <= 200 or offset < 0:
+            raise ValueError('审计分页参数无效')
+        conditions, params = [], []
+        for column, value in (('note_id',note_id),('operation_id',operation_id)):
+            if value:
+                if column == 'note_id':
+                    conditions.append('(note_id=%s OR operation_id IN (SELECT operation_id FROM write_audit WHERE note_id=%s))')
+                    params.extend([UUID(value), UUID(value)])
+                else:
+                    conditions.append(column+'=%s')
+                    params.append(UUID(value))
+        if outcome:
+            if outcome not in {'started','success','noop','partial','failure','denied','committed_error','unknown'}:
+                raise ValueError('审计结果类型无效')
+            conditions.append('outcome=%s')
+            params.append(outcome)
+        where = ' AND '.join(conditions) if conditions else 'TRUE'
+        with self.db.connect() as conn:
+            rows = conn.execute(f'SELECT * FROM write_audit WHERE {where} ORDER BY recorded_at DESC,id DESC LIMIT %s OFFSET %s',
+                                [*params,limit+1,offset]).fetchall()
+        return {'results':[{key:(value.isoformat() if isinstance(value,datetime) else str(value) if isinstance(value,UUID) else value)
+                            for key,value in row.items()} for row in rows[:limit]],
+                'next_offset':offset+limit if len(rows)>limit else None}
+
+    def read_version(self, note_id, revision):
+        self.guard(admin=True)
+        if '*' not in self.policy.spaces:
+            raise PermissionError('历史版本需要全空间管理权限')
+        if type(revision) is not int or revision < 1:
+            raise ValueError('版本号须为正整数')
+        with self.db.connect() as conn:
+            row = conn.execute('SELECT * FROM note_versions WHERE note_id=%s AND revision=%s', [UUID(note_id),revision]).fetchone()
+        if not row:
+            raise LookupError('历史版本不存在')
+        return {'note_id':str(row['note_id']), 'revision':row['revision'], 'body':row['body'],
+                'metadata':row['metadata'], 'saved_at':row['saved_at'].isoformat()}

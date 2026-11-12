@@ -27,6 +27,15 @@ def main():
     search.add_argument("--end")
     read = sub.add_parser("read")
     read.add_argument("note_id")
+    audit = sub.add_parser("audit")
+    audit.add_argument("--note-id")
+    audit.add_argument("--operation-id")
+    audit.add_argument("--outcome")
+    audit.add_argument("--limit", type=int, default=50)
+    audit.add_argument("--offset", type=int, default=0)
+    version = sub.add_parser("version")
+    version.add_argument("note_id")
+    version.add_argument("revision", type=int)
     capture = sub.add_parser("capture")
     capture.add_argument("--title", required=True)
     capture.add_argument("--body", required=True)
@@ -68,6 +77,11 @@ def main():
                     result = service.search(args.query, space=args.space, start=args.start, end=args.end)
                 elif args.command == "read":
                     result = service.read(args.note_id)
+                elif args.command == "audit":
+                    result = service.list_audit(note_id=args.note_id, operation_id=args.operation_id,
+                        outcome=args.outcome, limit=args.limit, offset=args.offset)
+                elif args.command == "version":
+                    result = service.read_version(args.note_id, args.revision)
                 elif args.command == "capture":
                     result = service.capture(args.title, args.body, args.space,
                         event_date=args.date, request_id=args.request_id)

@@ -34,8 +34,11 @@ def test_policy_cannot_start_above_cap():
         Policy("test", ("*",))
 
 
-def test_off_blocks_before_database_access(settings):
+def test_off_blocks_reads_before_database_access(settings, monkeypatch):
     service = MemoryService(settings, Policy("test", ("general",)))
+    # Write denial itself is audited; its persistence is covered against real PG.
+    monkeypatch.setattr(service.audit, "start", lambda attempt: None)
+    monkeypatch.setattr(service.audit, "finish", lambda attempt, **kw: None)
     with pytest.raises(PermissionError):
         service.search("秘密")
     with pytest.raises(PermissionError):
@@ -108,13 +111,13 @@ def test_readonly_mcp_does_not_expose_write_tools(settings):
     tools = asyncio.run(server.list_tools())
     names = {t.name for t in tools}
     assert {"search_notes", "read_note", "set_memory_mode"} <= names
-    assert not names.intersection({"capture_note", "append_note", "archive_note", "sync_notes"})
+    assert not names.intersection({"capture_note", "append_note", "archive_note", "sync_notes", "list_write_audit", "read_note_version"})
 
 
 def test_manager_tools(settings):
     server = create_server(MemoryService(settings, Policy("manager", ("*",), "readwrite", "readwrite", True)))
     names = {t.name for t in asyncio.run(server.list_tools())}
-    assert {"capture_note", "append_note", "archive_note", "sync_notes"} <= names
+    assert {"capture_note", "append_note", "archive_note", "sync_notes", "list_write_audit", "read_note_version"} <= names
 
 
 def test_codex_snippet_is_valid_toml(tmp_path):
