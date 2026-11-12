@@ -1,5 +1,6 @@
 """Verify the installed-cache launcher with real MCP calls and isolated data."""
 import asyncio
+import base64
 import json
 import os
 import subprocess
@@ -28,7 +29,7 @@ def main():
         raise SystemExit('只允许本项目独立数据库')
     name = 'personal_rag_test_plugin_' + uuid4().hex[:10]
     admin = urlunsplit(parsed._replace(path='/postgres'))
-    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.4.1')
+    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.4.2')
     launcher = Path(os.environ.get('PERSONAL_RAG_TEST_LAUNCHER',
                     str(ROOT / 'plugins/personal-memory/scripts/start-memory.ps1')))
     assert launcher.is_file()
@@ -82,8 +83,22 @@ def main():
                         found = payload(await client.call_tool('search_notes', {'query':'讨论重点'}))
                         assert any(row['note_id'] == summary['id'] for row in found['results'])
                         assert payload(await client.call_tool('search_notes',{'query':'原样'}))['results']
+                        image = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV0sAAAAASUVORK5CYII=')
+                        incoming = root / 'knowledge_workspace/vault/inbox/.incoming/photo.png'
+                        incoming.parent.mkdir(parents=True, exist_ok=True)
+                        incoming.write_bytes(image)
+                        picture = payload(await client.call_tool('capture_note',{'title':'图片识别稿','body':'IMAGE_ORIGINAL_CHECK 识别文字',
+                            'space':'inbox','request_id':str(uuid4()),'source_type':'summary','image_paths':['inbox/.incoming/photo.png']}))
+                        attachment = picture['images'][0]
+                        rendered = await client.call_tool('read_note_image',{'note_id':picture['id'],'image_id':attachment['image_id']})
+                        assert not rendered.isError
+                        content = next(item for item in rendered.content if item.type == 'image')
+                        assert base64.b64decode(content.data) == image
+                        assert (root / 'knowledge_workspace/vault' / attachment['relative_path']).read_bytes() == image
+                        matches = payload(await client.call_tool('search_notes',{'query':'IMAGE_ORIGINAL_CHECK'}))['results']
+                        assert any(row['images'] and row['note_id'] == picture['id'] for row in matches)
                         files = list((root/'knowledge_workspace/vault').rglob('*.md'))
-                        assert len(files)==2
+                        assert len(files)==3
                         original = [p for p in files if note['id'] in p.name][0]
                         assert original.read_bytes().split(b'\n',1)[1]==body.encode('utf-8')
                         payload(await client.call_tool('set_memory_mode',{'mode':'off'}))
@@ -92,7 +107,8 @@ def main():
         report={'passed':True,'image':image,'launcher':str(launcher),'external_model_calls':0,
                 'checks':['cached launcher','tool discovery','initial off','no admin tools','verbatim bytes',
                           'idempotent retry','freeform summary','source linkage','search','host persistence','off blocks writes',
-                          'separate wildcard scopes', 'future space cross-scope search']}
+                          'separate wildcard scopes', 'future space cross-scope search', 'original image bytes',
+                          'image MCP response', 'image search association']}
         (ROOT/'output/plugin-smoke.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
         print(json.dumps(report,ensure_ascii=False,indent=2))
     finally:

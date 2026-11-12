@@ -3,6 +3,7 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
+from mcp.server.fastmcp.utilities.types import Image
 
 from .service import MemoryService
 from .embeddings import EmbeddingRequestError
@@ -47,6 +48,12 @@ def create_server(service: MemoryService):
         return call(service.read, note_id)
 
     @server.tool(annotations=ToolAnnotations(readOnlyHint=True))
+    def read_note_image(note_id: str, image_id: str):
+        """读取搜索/read_note返回的关联原图，检查笔记权限与SHA256，并返回图片内容。不能用于任意文件路径。"""
+        data, media_type = call(service.read_image, note_id, image_id)
+        return Image(data=data, format={'image/png':'png','image/jpeg':'jpeg','image/webp':'webp'}[media_type])
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=True))
     def get_timeline(start: str, end: str, space: str | None = None,
                      limit: int = 100, offset: int = 0) -> dict:
         """按事件日期获取授权记录；分页读取至 next_offset 为空，避免漏掉复盘资料。"""
@@ -57,10 +64,10 @@ def create_server(service: MemoryService):
         def capture_note(title: str, body: str, space: str, request_id: str,
                          event_date: str | None = None, tags: list[str] | None = None,
                          source_type: Literal["original", "summary"] = "original",
-                         source_ids: list[str] | None = None) -> dict:
-            """保存自由格式正文，保留原样空白换行。request_id为UUID，重试沿用。原样用original，AI总结用summary；source_ids只填已有笔记ID。"""
+                         source_ids: list[str] | None = None, image_paths: list[str] | None = None) -> dict:
+            """保存自由格式正文。request_id为UUID，重试沿用。原样用original，AI总结/识别稿用summary。可选image_paths为已复制到vault/<space>/.incoming/的原图相对路径（最多5张、每张10MiB，PNG/JPEG/WebP），会附加图片引用；不能传宿主机或vault外路径。source_ids只填已有笔记ID。"""
             return call(service.capture, title, body, space, request_id=request_id,
-                        event_date=event_date, tags=tags, source_type=source_type, source_ids=source_ids)
+                        event_date=event_date, tags=tags, source_type=source_type, source_ids=source_ids, image_paths=image_paths)
 
         @server.tool(annotations=ToolAnnotations(destructiveHint=False))
         def append_note(note_id: str, text: str, expected_revision: int) -> dict:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
@@ -17,6 +18,7 @@ from .embeddings import Embeddings
 from .parsing import decode_note, encode_note, parents_for, parse
 from .retrieval import fuse, keyword_rank, rerank
 from .audit import AuditStore, audited_write, observe_note, identify_note
+from . import images
 
 
 def digest(data: bytes):
@@ -114,6 +116,7 @@ class MemoryService:
             result[key] = result[key].isoformat()
         result["path"] = str(self._path(row["relative_path"]))
         result["citation"] = f"memory://{row['id']}?revision={row['revision']}"
+        result['images'] = images.describe(self, row)
         if body:
             result["body"] = row["body"]
         return result
@@ -166,7 +169,7 @@ class MemoryService:
     @audited_write('capture')
     def capture(self, title: str, body: str, space: str, *, event_date: str | None = None,
                 tags: list[str] | None = None, source_type="original", source_ids: list[str] | None = None,
-                request_id: str | None = None):
+                request_id: str | None = None, image_paths: list[str] | None = None):
         self.guard(write=True, space=space)
         title = title.strip()
         if not title or len(title) > 200 or not body.strip() or len(body) > 200000:
@@ -179,6 +182,10 @@ class MemoryService:
         day = date.fromisoformat(event_date) if event_date else datetime.now(ZoneInfo("Asia/Shanghai")).date()
         note_id = uuid5(NAMESPACE_URL, f"personal-rag:{space}:{UUID(request_id)}") if request_id else uuid4()
         identify_note(note_id, space)
+        assets = images.prepare(self, space, note_id, [] if image_paths is None else image_paths)
+        body = images.append_links(body, assets, space)
+        if len(body) > 200000:
+            raise ValueError('附带图片引用后正文超过200000字符，请拆分笔记')
         sources = [str(UUID(s)) for s in (source_ids or [])]
         row = {"id": note_id, "space": space, "title": title, "body": body, "tags": tags,
                "event_date": day, "source_type": source_type, "source_ids": sources}
@@ -192,12 +199,17 @@ class MemoryService:
                 observe_note(existing)
                 if existing["deleted"] or any(existing[k] != row[k] for k in ("space", "title", "body", "tags", "event_date", "source_type", "source_ids")):
                     raise ValueError("request_id 已用于不同内容或已删除记录")
+                for relative_image, original in assets:
+                    saved = self._path(relative_image)
+                    if not saved.is_file() or digest(saved.read_bytes()) != digest(original):
+                        raise ValueError('已保存笔记的原图缺失或损坏，请从备份恢复；未重复创建笔记')
                 return self._public(existing) if self.policy.permits(space) else {
                     'id':str(existing['id']), 'space':space, 'revision':existing['revision']}
             for source in sources:
                 self._get(conn, source)
         prepared = self._prepare(path, body, title)
         wrote = False
+        new_images = []
         try:
             with self.db.connect() as conn:
                 conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(note_id)])
@@ -207,6 +219,14 @@ class MemoryService:
                     raise ValueError("并发重复记录，请用相同 request_id 重试")
                 if path.exists():
                     raise ValueError("目标文件已存在，请先 sync")
+                for relative_image, original in assets:
+                    image = self._path(relative_image)
+                    if image.exists():
+                        if digest(image.read_bytes()) != digest(original):
+                            raise ValueError('托管原图校验失败')
+                    else:
+                        self._atomic_write(image, original)
+                        new_images.append(image)
                 for source in sources:
                     self._get(conn, source)
                 conn.execute("""INSERT INTO notes(id,space,title,body,relative_path,tags,event_date,file_hash,source_type,source_ids)
@@ -217,12 +237,36 @@ class MemoryService:
                 wrote = True
         except Exception:
             # Preserve a possibly committed file for reconciliation if commit outcome is unknown.
-            if wrote:
+            if wrote or new_images:
                 with self.db.connect() as check:
                     if not check.execute("SELECT id FROM notes WHERE id=%s", [note_id]).fetchone():
-                        path.unlink(missing_ok=True)
+                        if wrote:
+                            path.unlink(missing_ok=True)
+                        for image in new_images:
+                            image.unlink(missing_ok=True)
             raise
         return self._write_result(str(note_id))
+
+    def read_image(self, note_id: str, image_id: str):
+        self.guard()
+        if not isinstance(image_id,str) or not re.fullmatch('[0-9a-f]{64}',image_id):
+            raise ValueError('图片ID须为SHA256哈希')
+        with self.db.connect() as conn:
+            row = self._get(conn, note_id)
+        if not self._current_file(row):
+            raise ValueError('笔记原文已变化，请先同步')
+        attachment = next((item for item in images.describe(self,row) if item['image_id'] == image_id),None)
+        if not attachment:
+            raise LookupError('笔记未关联该图片')
+        try:
+            with self._path(attachment['relative_path']).open('rb') as stream:
+                data = stream.read(images.MAX_IMAGE_BYTES+1)
+        except OSError:
+            raise ValueError('关联原图缺失或不可读，请从备份恢复') from None
+        if digest(data) != image_id:
+            raise ValueError('原图缺失、损坏或被修改，未返回未经校验的数据')
+        images.validate(data, Path(attachment['relative_path']).suffix)
+        return data, attachment['media_type']
 
     @audited_write('append')
     def append(self, note_id: str, text: str, expected_revision: int):
@@ -306,6 +350,7 @@ class MemoryService:
                 output.append({"note_id": str(row["note_id"]), "title": row["title"], "space": row["space"],
                     "event_date": row["event_date"].isoformat(), "revision": row["revision"],
                     "path": str(self._path(row["relative_path"])), "section": parent["section"],
+                    "images": images.describe(self, self._get(conn, row['note_id'])),
                     "citation": f"memory://{row['note_id']}?revision={row['revision']}", "content": content})
                 if len(output) == limit:
                     break
