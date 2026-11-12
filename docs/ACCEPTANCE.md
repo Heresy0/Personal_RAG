@@ -5,6 +5,8 @@
 - 所有验收使用临时数据库和资料目录，外部模型调用0；企业源码5个提取文件及38个容器基线只读核对一致。
 - 新安装普通插件默认read_spaces/write_spaces均为["*"]，admin=false，初始off；已有连接不自动扩大权限。旧spaces同时回退到读写两侧，新字段可分别覆盖，显式[]禁止该侧访问。详见[读写空间权限](SPACE_PERMISSIONS.md)。
 - 本机升级前数据库、原文、.env与连接配置已备份至Git忽略目录`output/pre-permissions-upgrade-20261112-202355/`。
+- [GHCR发布43217944381](https://github.com/Heresy0/Personal_RAG/actions/runs/43217944381)成功，公开镜像`ghcr.io/heresy0/personal_rag:0.4.0`提交为`7fbfdae`，摘要`sha256:05a60c3fef879b4d28f86daf6b66983528e5854aa12a7097067d8ad066d95802`。匿名拉取验证通过，公开镜像再次通过13项隔离插件验收。
+- 本机已拉取并初始化0.4.0，notes/parents/chunks及原件指纹保持一致；本机plugin-memory配置已按用户授权改为两个["*"]、admin=false、initial_mode=off。实际缓存插件对本机后端的工具发现和权限状态验证通过；退出旧连接后重新加载生效。
 
 # 写入审计0.3.0验收 · 2026-11-12
 
