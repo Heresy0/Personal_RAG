@@ -1,11 +1,23 @@
 # Requires Docker Desktop / Compose and PowerShell 7; no host Python needed.
 [CmdletBinding()]
-param([switch]$Build, [switch]$SkipBuild)
+param([switch]$Build, [switch]$SkipBuild, [string]$Image)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'docker-common.ps1')
 $ragRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $ragRoot
 Initialize-RagDockerEnvironment -RagRoot $ragRoot
+if ($Image) {
+    if ($Image -cnotmatch '^[a-z0-9][a-z0-9./_:@-]*$') { throw '镜像名称格式无效' }
+    $ragEnvPath = Join-Path $ragRoot '.env'
+    $ragEnvironment = [IO.File]::ReadAllText($ragEnvPath)
+    if ($ragEnvironment -match '(?m)^PERSONAL_RAG_IMAGE=') {
+        $ragEnvironment = [regex]::Replace($ragEnvironment, '(?m)^PERSONAL_RAG_IMAGE=[^\r\n]*', "PERSONAL_RAG_IMAGE=$Image")
+    } else {
+        $ragEnvironment += "`nPERSONAL_RAG_IMAGE=$Image`n"
+    }
+    [IO.File]::WriteAllText($ragEnvPath, $ragEnvironment)
+    $env:PERSONAL_RAG_IMAGE = $Image
+}
 $ragCompose = @('compose', '-f', 'compose.yaml', '-f', 'compose.docker.yaml')
 if ($Build -and $SkipBuild) { throw '-Build 与 -SkipBuild 不能同时使用' }
 if ($Build) {

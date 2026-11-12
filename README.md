@@ -37,8 +37,7 @@ docker pull ghcr.io/heresy0/personal_rag:0.1.0
 
 ```powershell
 docker load -i personal-rag-0.1.0-linux-amd64.tar.gz
-$env:PERSONAL_RAG_IMAGE = 'personal-rag:0.1.0'
-.\scripts\setup-docker.ps1 -SkipBuild
+.\scripts\setup-docker.ps1 -SkipBuild -Image personal-rag:0.1.0
 ```
 
 镜像文件仅包含应用，仍需本仓库的 Compose、配置模板和管理说明；PostgreSQL 镜像首次启动时单独拉取。当前导出验收平台为 Linux/amd64（Windows Docker Desktop 使用 Linux 容器）。公开镜像和版本见 [GitHub Packages](https://github.com/Heresy0/Personal_RAG/pkgs/container/personal_rag)。

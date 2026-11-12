@@ -53,3 +53,13 @@
 - 容器验收使用临时数据库与临时挂载目录，结束后清理。首次验收发现Compose 2.31的run -v未覆盖已有挂载；改为明确Compose文件覆盖后通过，遗留的两份合成Markdown及探针已核对内容并清理。
 - 原生管理配置可从 knowledge_workspace/.codex/ 下的备份恢复。Docker版返回容器路径，宿主机原件仍在 knowledge_workspace/vault；可用read_note获取全文。
 - 本机导出脚本为 `scripts/export_image.py`，压缩镜像位于被Git忽略的output；镜像尚未上传公共镜像仓库，macOS/ARM尚未在本机验证。
+
+## GHCR 公开发布验收 · 2026-11-12
+
+- 已发布 `ghcr.io/heresy0/personal_rag:0.1.0`、`latest` 和 `sha-d6a737165eb494d1be92d9a4e1cffbf047c638dd`，Linux/amd64。
+- 镜像包公开且关联本仓库；匿名读取0.1.0与latest清单成功，两者摘要一致：`sha256:e86d18930d5d577326def51720e89fe448d7838e802b8de407e549562ecd2893`。
+- 使用临时空Docker凭据配置完整拉取成功；未复用本机GitHub凭据，也不要求朋友登录GHCR。
+- 默认安装脚本实际通过：拉取镜像、启动已有独立数据库、初始化表、生成Docker管理连接配置。发布镜像的11项MCP端到端检查全部通过，外部模型调用0。
+- 首次发布在附带attestation的清单阶段被拒绝，失败运行保留：[43195119503](https://github.com/Heresy0/Personal_RAG/actions/runs/43195119503)。调整为明确的Linux/amd64单平台后，[43195519864](https://github.com/Heresy0/Personal_RAG/actions/runs/43195519864) 发布成功。
+- 工作流只在推送v*标签或显式手动触发时发布，使用短期GITHUB_TOKEN及contents:read/packages:write权限，不保存个人访问令牌。
+- 上节“尚未上传公共镜像仓库”是发布前状态；当前使用方式见README的Docker安装。
