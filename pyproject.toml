@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "personal-rag"
+version = "0.1.0"
+description = "Local personal knowledge and optional MCP long-term memory"
+requires-python = ">=3.12"
+dependencies = [
+  "mcp>=1.20,<2", "psycopg[binary]>=3.2,<4", "pgvector>=0.4,<1",
+  "numpy>=1.26,<3", "jieba==0.42.1", "rank-bm25==0.2.2",
+  "langchain-core>=1,<2", "langchain-text-splitters>=1,<2",
+  "python-docx>=1.2,<2", "pypdf>=6,<7", "python-dotenv>=1,<2", "httpx>=0.28,<1", "tzdata>=2025"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+personal-rag = "personal_rag.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+personal_rag = ["schema.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires an isolated PostgreSQL test database"]

@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# Preserve the byte fingerprints recorded for verbatim source extraction.
+src/personal_rag/extracted/*.py -text whitespace=cr-at-eol

@@ -1,0 +1,5 @@
+name = "personal-knowledge-manager"
+spaces = ["*"]
+maximum_mode = "readwrite"
+initial_mode = "readwrite"
+admin = true

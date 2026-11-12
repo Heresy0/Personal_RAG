@@ -1,0 +1,5 @@
+name = "example-project"
+spaces = ["general", "project-example"]
+maximum_mode = "read"
+initial_mode = "off"
+admin = false

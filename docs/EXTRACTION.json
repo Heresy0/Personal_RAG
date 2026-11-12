@@ -1,0 +1,46 @@
+{
+  "source_commit": "825ac0a",
+  "files": [
+    {
+      "source": "D:\\code\\Enterprise_knowladge\\backend\\app\\documents\\document_splitter.py",
+      "target": "src\\personal_rag\\extracted\\document_splitter.py",
+      "sha256": "edaae57c889dc00ca8d1967ed57478ae2094da41355818190c1d410cd4316143",
+      "changes": "verbatim"
+    },
+    {
+      "source": "D:\\code\\Enterprise_knowladge\\backend\\app\\documents\\document_cleaning.py",
+      "target": "src\\personal_rag\\extracted\\document_cleaning.py",
+      "sha256": "5a4899db992f987968026f9114a420ad95a8a7a00084ea72ea567a138ab7d08c",
+      "changes": "verbatim"
+    },
+    {
+      "source": "D:\\code\\Enterprise_knowladge\\backend\\app\\documents\\chunk_quality.py",
+      "target": "src\\personal_rag\\extracted\\chunk_quality.py",
+      "sha256": "4ae529b11b07b7fd0eb332d2e6c751c0a1395a9cad69e37c928950905152c65c",
+      "changes": "verbatim"
+    },
+    {
+      "source": "D:\\code\\Enterprise_knowladge\\backend\\app\\documents\\text_splitter.py",
+      "target": "src\\personal_rag\\extracted\\text_splitter.py",
+      "sha256": "c88f31152995cf2ec3fa9ff6a1d67fad6dfaab4886504e6f64c65362c01e2774",
+      "changes": "verbatim"
+    },
+    {
+      "source": "D:\\code\\Enterprise_knowladge\\backend\\app\\knowledge\\keyword_tokenizer.py",
+      "target": "src\\personal_rag\\extracted\\keyword_tokenizer.py",
+      "sha256": "6b3f20f797c8a82dada18b2c636a829023731ed2a52ffbea0ab22d78c4aad002",
+      "changes": "verbatim"
+    }
+  ],
+  "adapted": [
+    "Weighted RRF from hybrid_retriever.py",
+    "Extractive bounded parents from parent_chunks.py"
+  ],
+  "excluded": [
+    "enterprise config and credentials",
+    "databases and indexes",
+    "tenant authorization",
+    "manufacturing services",
+    "answer generation and repair"
+  ]
+}

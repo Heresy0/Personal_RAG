@@ -1,0 +1,20 @@
+name: personal-rag
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: personal_rag
+      POSTGRES_USER: personal_rag
+      POSTGRES_PASSWORD: ${PERSONAL_RAG_DB_PASSWORD:?Run scripts/setup.ps1 first}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - personal_rag_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U personal_rag -d personal_rag"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+volumes:
+  personal_rag_pgdata:
