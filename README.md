@@ -2,13 +2,17 @@
 
 个人知识库与可选 MCP 长期记忆。PostgreSQL + pgvector 保存元数据、历史版本、父子分块和向量；Markdown 保存原文，Codex 负责理解和回答。
 
+当前后端版本 **0.4.1**：修复长笔记的嵌入请求批量限制，每批最多10个分块；0.4.0起读写空间权限独立，普通插件新安装默认全空间读写，保持非管理员。后端镜像与插件包版本独立，插件包显示0.2.0不表示后端未升级。
+
 ## 在其他项目会话中选择插件
 
 已提供本地桌面插件 **个人知识库 / Personal Memory**，支持查询、原样保存和总结后存入。总结内容不设固定模板，学习、工作、生活都使用同一入口。
 
-先在PowerShell 7中初始化后端，再安装：
+准备 Docker Desktop（Linux容器）、PowerShell 7 和 Codex。Docker Desktop保持运行。首次安装在PowerShell 7中执行：
 
 ```powershell
+git clone https://github.com/Heresy0/Personal_RAG.git
+cd Personal_RAG
 .\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.1
 .\scripts\install-plugin.ps1
 ```
@@ -37,7 +41,35 @@
 
 重复安装保留已有连接权限；可编辑 `config/connections/plugin-memory.toml` 调整本机允许空间，重启连接后生效。新安装默认自动包含project-*等未来空间；旧配置仍沿用原范围。此范围按连接控制，不自动猜测当前会话属于哪个项目；同一MCP进程共享模式。
 
+也可以分别设置，例如首次安装时使用 `install-plugin.ps1 -ReadSpaces learning -WriteSpaces inbox`。未指定空间的查询覆盖所有可读空间；每次保存到一个可写空间。`space`负责访问范围，标签用于细分主题和项目。完整规则见[读写空间权限](docs/SPACE_PERMISSIONS.md)。
+
 插件入口在 `plugins/personal-memory`，目录清单在 `.agents/plugins/marketplace.json`。朋友可克隆仓库执行相同安装步骤；每个人使用自己的数据库、笔记和模型配置，不共享作者的个人知识库。
+
+## 已有安装升级
+
+先备份PostgreSQL、vault、`.env`、本机连接配置及应急日志，再在已有仓库目录执行：
+
+```powershell
+git pull
+.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.1
+```
+
+必须显式指定镜像版本：本机`.env`可能固定了旧的`PERSONAL_RAG_IMAGE`，仅执行git pull不会替换镜像或更新已运行的MCP进程。setup会拉取镜像、执行幂等数据库初始化并更新本机镜像设置，不删除已有数据。
+
+已有连接范围会保留。若要从旧的有限空间切换到普通插件全库读写，升级后将本机`config/connections/plugin-memory.toml`设置为：
+
+```toml
+name = "plugin-memory"
+read_spaces = ["*"]
+write_spaces = ["*"]
+maximum_mode = "readwrite"
+initial_mode = "off"
+admin = false
+```
+
+此配置允许所有使用该连接的项目访问全部现有和未来空间，不授予管理工具。需要限制访问时保留有限列表；旧`spaces`配置仍兼容，不会因升级自动扩大。
+
+升级后须重新启动MCP连接。新开会话不保证刷新，客户端可能复用旧进程；若仍返回旧状态，可等其他工作结束后完全退出并重开Codex。让助手调用`memory_status`核对`read_spaces`、`write_spaces`、`admin`；不要仅凭＋号中能选到插件就认为运行的是新版。
 
 ## Docker 安装（无需本机 Python）
 
@@ -82,7 +114,7 @@ docker load -i personal-rag-0.1.0-linux-amd64.tar.gz
 macOS/Linux 可手动创建 `.env`（参考模板，填写随机数据库密码及一致的 DATABASE_URL）后运行：
 
 ```sh
-mkdir -p knowledge_workspace/vault
+mkdir -p knowledge_workspace/vault logs
 # Linux 绑定目录需匹配宿主机 UID/GID；可在 .env 设置 PERSONAL_RAG_UID/GID。
 docker compose -f compose.yaml -f compose.docker.yaml pull mcp
 docker compose -f compose.yaml -f compose.docker.yaml up -d --wait postgres
@@ -95,7 +127,7 @@ MCP 客户端的 command 为 `docker`，args 使用上述 Compose 文件的绝�
 
 从 `D:/code/Enterprise_knowladge` 只读提取通用解析、保守清洗、中文分词，并改写 RRF 和父块组织逻辑。没有企业运行时依赖。来源清单见 [EXTRACTION.json](docs/EXTRACTION.json)。
 
-## 首次启动（Windows / PowerShell 7）
+## 可选：原生 Python 安装（Windows / PowerShell 7）
 
 ```powershell
 cd D:\code\Personal_RAG
@@ -116,7 +148,7 @@ docker compose up -d --wait postgres
 ## 专用知识库管理项目
 
 在 Codex 的添加项目/打开文件夹入口选择 **`D:\code\Personal_RAG\knowledge_workspace`**。
-该目录已有 `AGENTS.md`、使用说明和 `.codex/config.toml`，使用 manager 连接，默认读写、可访问全部资料空间。
+该目录提供 `AGENTS.md` 和使用说明，安装脚本生成 `.codex/config.toml`，使用 manager 连接，默认读写、可访问全部资料空间。
 配置须在可信项目中加载；已打开的会话请重启/新开会话，并确认出现 `personal_memory` 工具。
 
 日常直接说：
@@ -164,8 +196,18 @@ docker compose up -d --wait postgres
 rerank 使用完整 `/rerank` 接口地址，接受 `model/query/documents/top_n` 并返回 `results[index,relevance_score]`。
 重排失败会明确标记 fallback；向量服务失败会报告错误，不默默伪装成语义搜索成功。
 
+0.4.1将同步嵌入请求拆成每批最多10段，适配text-embedding-v4的[批量上限](https://help.aliyun.com/en/model-studio/embedding-interfaces-compatible-with-openai)。大于10个分块的资料会分多次请求，不需要手动拆成多篇笔记。模型返回非成功状态时，MCP会提供HTTP状态码和本批数量，不暴露供应商响应正文或密钥。HTTP 400也可能来自其他输入或配置问题，不能仅凭状态码断定原因。
+
 本次用户授权复用企业项目模型设置，已通过 `scripts/import_model_config.py` 只读导入必要的 embedding/rerank 项到本项目 `.env`。不配置主生成模型；记录理解、总结与问答由 Codex 完成。
 `.env` 不进入版本控制。启用云模型会将对应片段发送给供应商，并产生其 API 费用。
+
+## 常见问题
+
+- **管理会话能查到，普通插件查不到**：先看连接的`read_spaces`，以及记录所属空间；旧连接可能保留有限范围。查询无结果不等于原文不存在。
+- **升级后仍显示旧的五个空间**：运行中的MCP进程未刷新。先核对`memory_status`，待方便时重启Codex；不要反复修改数据库或重复保存。
+- **提示索引片段为0**：该数字是本次查询的授权空间和日期范围内的候选数，不一定是全库总数。请核对连接权限、日期和资料是否同步。
+- **保存返回模型HTTP错误**：先在管理项目查看写入审计，核对是否已提交。旧版长笔记可能触发嵌入批量限制，请升级0.4.1并重新加载连接。capture重试沿用同一个request_id和相同内容；若是committed_error或started/unknown，先对照变更事件和原件，避免重复记录。
+- **想核查修改历史**：在管理项目请求“查看最近写入审计”或“读取这条笔记第N版”。普通插件没有全库审计、历史版本、同步及归档工具，详见[审计说明](docs/WRITE_AUDIT.md)。
 
 ## 数据与可靠性
 
@@ -201,9 +243,10 @@ rerank 使用完整 `/rerank` 接口地址，接受 `model/query/documents/top_n
 
 ## 备份
 
-同时备份 `.env`、vault 原文/附件和 PostgreSQL。示例在本项目容器内生成导出，再复制到本项目 output：
+同时备份 `.env`、本机连接配置、vault原文/附件、PostgreSQL和应急日志（Docker为`logs/`，原生默认`knowledge_workspace/logs/`）。数据库导出包含审计和历史版本，但不包含原文附件和应急文件。示例在本项目容器内生成导出，再复制到本项目output（先确保该目录存在）：
 
 ```powershell
+New-Item -ItemType Directory -Force output | Out-Null
 docker compose exec -T postgres pg_dump -U personal_rag -d personal_rag -Fc -f /tmp/personal-rag.dump
 docker compose cp postgres:/tmp/personal-rag.dump ./output/personal-rag.dump
 ```
