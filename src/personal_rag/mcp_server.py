@@ -5,6 +5,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from .service import MemoryService
+from .embeddings import EmbeddingRequestError
 
 
 def create_server(service: MemoryService):
@@ -19,7 +20,7 @@ def create_server(service: MemoryService):
     def call(method, *args, **kwargs):
         try:
             return method(*args, **kwargs)
-        except (PermissionError, ValueError, LookupError) as error:
+        except (PermissionError, ValueError, LookupError, EmbeddingRequestError) as error:
             raise ToolError(str(error)) from None
         except Exception:
             raise ToolError("知识库操作失败；请在管理项目检查数据库和模型服务。未确认保存成功。") from None

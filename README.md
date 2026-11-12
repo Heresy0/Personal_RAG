@@ -9,7 +9,7 @@
 先在PowerShell 7中初始化后端，再安装：
 
 ```powershell
-.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.0
+.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.1
 .\scripts\install-plugin.ps1
 ```
 
@@ -47,12 +47,12 @@
 .\scripts\setup-docker.ps1
 ```
 
-脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.4.0`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
+脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.4.1`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
 
 也可单独拉取：
 
 ```powershell
-docker pull ghcr.io/heresy0/personal_rag:0.4.0
+docker pull ghcr.io/heresy0/personal_rag:0.4.1
 ```
 
 需要本地构建时使用 `.\scripts\setup-docker.ps1 -Build`。可在 `.env` 中设置 `PERSONAL_RAG_IMAGE` 指定其他镜像或固定digest。
@@ -171,7 +171,7 @@ rerank 使用完整 `/rerank` 接口地址，接受 `model/query/documents/top_n
 
 0.4.0支持[读写空间权限分离](docs/SPACE_PERMISSIONS.md)：普通插件新安装默认全空间读写，保持admin=false；旧spaces配置继续生效，不自动扩大已有权限。
 
-0.3.0新增[写入审计与历史版本](docs/WRITE_AUDIT.md)：记录知识写入成功、失败、拒绝与前后版本；管理会话可查询，普通项目插件不暴露全库日志。已有部署请先备份，再运行 `scripts/setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.0` 完成数据库迁移。
+0.3.0新增[写入审计与历史版本](docs/WRITE_AUDIT.md)：记录知识写入成功、失败、拒绝与前后版本；管理会话可查询，普通项目插件不暴露全库日志。已有部署请先备份，再运行 `scripts/setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.1` 完成数据库迁移。
 
 - `notes`：稳定 ID、空间、日期、标签、来源、修订号与文件哈希。
 - `note_versions`：记录写入/同步后的历史正文及元数据。

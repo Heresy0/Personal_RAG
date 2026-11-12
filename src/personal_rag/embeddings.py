@@ -5,6 +5,10 @@ import httpx
 from .config import Settings
 
 
+class EmbeddingRequestError(RuntimeError):
+    """Safe diagnostics without provider response bodies, credentials or note text."""
+
+
 class Embeddings:
     """Explicit opt-in OpenAI-compatible embeddings. No implicit provider fallback."""
     def __init__(self, settings: Settings):
@@ -20,13 +24,17 @@ class Embeddings:
         if not self.enabled:
             return []
         results = []
-        for offset in range(0, len(texts), 16):
-            batch = texts[offset:offset + 16]
+        # text-embedding-v3/v4 accept at most 10 inputs per synchronous request.
+        for offset in range(0, len(texts), 10):
+            batch = texts[offset:offset + 10]
             response = httpx.post(self.settings.embedding_url, timeout=45,
                 headers={"Authorization": f"Bearer {self.settings.embedding_api_key}"},
                 json={"model": self.settings.embedding_model, "input": batch,
                       "dimensions": self.settings.dimensions})
-            response.raise_for_status()
+            if not response.is_success:
+                raise EmbeddingRequestError(
+                    f"嵌入模型接口返回HTTP {response.status_code}（本批{len(batch)}段）；"
+                    "未确认保存成功。请检查模型配置、输入限制或服务状态；重试沿用原request_id。")
             rows = sorted(response.json()["data"], key=lambda row: row["index"])
             if [row["index"] for row in rows] != list(range(len(batch))):
                 raise ValueError("嵌入响应索引不完整")
