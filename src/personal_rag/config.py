@@ -59,28 +59,37 @@ class Settings:
 @dataclass(frozen=True)
 class Policy:
     name: str
-    spaces: tuple[str, ...]
+    spaces: tuple[str, ...] = ()
     maximum_mode: str = "read"
     initial_mode: str = "off"
     admin: bool = False
+    read_spaces: tuple[str, ...] | None = None
+    write_spaces: tuple[str, ...] | None = None
 
     def __post_init__(self):
         if self.maximum_mode not in MODES or self.initial_mode not in MODES:
             raise ValueError("未知记忆模式")
         if MODES[self.initial_mode] > MODES[self.maximum_mode]:
             raise ValueError("初始模式超过连接权限")
-        if not self.spaces or ("*" in self.spaces and not self.admin):
-            raise ValueError("只有管理连接可以使用全部空间")
-        for space in self.spaces:
-            if space != "*":
-                validate_space(space)
+        for name in ('spaces', 'read_spaces', 'write_spaces'):
+            values = getattr(self, name)
+            if values is None:
+                values = self.spaces
+            if not isinstance(values, (tuple, list)) or any(not isinstance(x, str) for x in values):
+                raise ValueError('空间权限须为字符串列表')
+            for space in values:
+                if space != '*':
+                    validate_space(space)
+            object.__setattr__(self, name, tuple(values))
 
     @classmethod
     def load(cls, path: Path):
         data = tomllib.loads(path.read_text(encoding="utf-8-sig"))
-        return cls(name=data["name"], spaces=tuple(data["spaces"]),
+        return cls(name=data["name"], spaces=data.get("spaces", ()),
                    maximum_mode=data.get("maximum_mode", "read"),
-                   initial_mode=data.get("initial_mode", "off"), admin=data.get("admin", False))
+                   initial_mode=data.get("initial_mode", "off"), admin=data.get("admin", False),
+                   read_spaces=data.get('read_spaces'), write_spaces=data.get('write_spaces'))
 
-    def permits(self, space: str):
-        return space in self.spaces or (self.admin and "*" in self.spaces)
+    def permits(self, space: str, *, write=False):
+        allowed = self.write_spaces if write else self.read_spaces
+        return space in allowed or '*' in allowed

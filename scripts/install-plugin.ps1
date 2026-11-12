@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^[a-z0-9][a-z0-9_-]{0,63}$')][string]$Connection = 'plugin-memory',
-    [string[]]$Spaces = @('general', 'inbox', 'learning', 'work', 'life'),
+    [string[]]$Spaces = @('*'),
+    [string[]]$ReadSpaces,
+    [string[]]$WriteSpaces,
     [switch]$ReadOnly,
     [string]$ConfigPath,
     [string]$CodexPath,
@@ -13,15 +15,18 @@ if (-not (Test-Path -LiteralPath (Join-Path $ragRoot '.env'))) {
     throw '先运行 scripts/setup-docker.ps1 初始化本机知识库。'
 }
 if ($Connection -eq 'manager') { throw '普通会话插件不能使用管理连接' }
-if (-not $Spaces.Count) { throw '至少选择一个资料空间' }
-foreach ($ragSpace in $Spaces) {
-    if ($ragSpace -cnotmatch '^[a-z0-9][a-z0-9_-]{0,63}$') { throw '资料空间名称无效' }
+if ($null -eq $ReadSpaces) { $ReadSpaces = $Spaces }
+if ($null -eq $WriteSpaces) { $WriteSpaces = $Spaces }
+if ($ReadOnly) { $WriteSpaces = @() }
+foreach ($ragSpace in @($ReadSpaces) + @($WriteSpaces)) {
+    if ($ragSpace -ne '*' -and $ragSpace -cnotmatch '^[a-z0-9][a-z0-9_-]{0,63}$') { throw '资料空间名称无效' }
 }
 $ragPolicyPath = Join-Path $ragRoot "config/connections/$Connection.toml"
 if (-not (Test-Path -LiteralPath $ragPolicyPath)) {
     $ragMode = if ($ReadOnly) { 'read' } else { 'readwrite' }
-    $ragSpacesJson = ConvertTo-Json -InputObject @($Spaces | Select-Object -Unique) -Compress
-    $ragPolicy = "name = `"$Connection`"`nspaces = $ragSpacesJson`nmaximum_mode = `"$ragMode`"`ninitial_mode = `"off`"`nadmin = false`n"
+    $ragReadJson = ConvertTo-Json -InputObject @($ReadSpaces | Select-Object -Unique) -Compress
+    $ragWriteJson = ConvertTo-Json -InputObject @($WriteSpaces | Select-Object -Unique) -Compress
+    $ragPolicy = "name = `"$Connection`"`nread_spaces = $ragReadJson`nwrite_spaces = $ragWriteJson`nmaximum_mode = `"$ragMode`"`ninitial_mode = `"off`"`nadmin = false`n"
     [void][IO.Directory]::CreateDirectory((Split-Path -Parent $ragPolicyPath))
     [IO.File]::WriteAllText($ragPolicyPath, $ragPolicy)
 } else {

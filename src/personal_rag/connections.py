@@ -21,8 +21,10 @@ def create_connection(name: str, *, write=False):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{name}.toml"
     mode = "readwrite" if write else "read"
+    read_spaces = json.dumps(['general', f'project-{name}'])
+    write_spaces = read_spaces if write else '[]'
     with path.open("x", encoding="utf-8") as stream:
-        stream.write(f'name = "{name}"\nspaces = ["general", "project-{name}"]\nmaximum_mode = "{mode}"\ninitial_mode = "off"\nadmin = false\n')
+        stream.write(f'name = "{name}"\nread_spaces = {read_spaces}\nwrite_spaces = {write_spaces}\nmaximum_mode = "{mode}"\ninitial_mode = "off"\nadmin = false\n')
     snippet = ROOT / "connections" / f"{name}.codex.toml"
     snippet.parent.mkdir(parents=True, exist_ok=True)
     snippet.write_text(codex_config(path), encoding="utf-8")

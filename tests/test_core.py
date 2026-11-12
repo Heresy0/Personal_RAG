@@ -30,8 +30,7 @@ def test_invalid_space(space):
 def test_policy_cannot_start_above_cap():
     with pytest.raises(ValueError):
         Policy("test", ("general",), "read", "readwrite")
-    with pytest.raises(ValueError):
-        Policy("test", ("*",))
+    assert Policy("test", ("*",)).permits('new-space')
 
 
 def test_off_blocks_reads_before_database_access(settings, monkeypatch):

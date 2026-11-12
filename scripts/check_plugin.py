@@ -28,7 +28,7 @@ def main():
         raise SystemExit('只允许本项目独立数据库')
     name = 'personal_rag_test_plugin_' + uuid4().hex[:10]
     admin = urlunsplit(parsed._replace(path='/postgres'))
-    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.3.0')
+    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.4.0')
     launcher = Path(os.environ.get('PERSONAL_RAG_TEST_LAUNCHER',
                     str(ROOT / 'plugins/personal-memory/scripts/start-memory.ps1')))
     assert launcher.is_file()
@@ -47,7 +47,7 @@ def main():
                 'postgres:5432/personal_rag', 'postgres:5432/' + name)
             (root / 'compose.docker.yaml').write_text(overlay, encoding='utf-8')
             (root / 'config/connections/plugin-memory.toml').write_text(
-                'name="plugin-test"\nspaces=["general","inbox"]\nmaximum_mode="readwrite"\ninitial_mode="off"\nadmin=false', encoding='utf-8')
+                'name="plugin-test"\nread_spaces=["*"]\nwrite_spaces=["*"]\nmaximum_mode="readwrite"\ninitial_mode="off"\nadmin=false', encoding='utf-8')
             local = root / 'plugin.json'
             local.write_text(json.dumps({'projectRoot':str(root), 'connection':'plugin-memory'}), encoding='utf-8')
             environment = dict(os.environ, PERSONAL_RAG_IMAGE=image)
@@ -63,10 +63,12 @@ def main():
                         await client.initialize()
                         tools = {tool.name for tool in (await client.list_tools()).tools}
                         assert {'capture_note','search_notes'} <= tools
-                        assert not {'sync_notes','archive_note'}.intersection(tools)
+                        assert not {'sync_notes','archive_note','list_write_audit','read_note_version'}.intersection(tools)
                         assert payload(await client.call_tool('memory_status',{}))['mode']=='off'
                         assert (await client.call_tool('search_notes',{'query':'原样'})).isError
                         payload(await client.call_tool('set_memory_mode',{'mode':'readwrite'}))
+                        status = payload(await client.call_tool('memory_status', {}))
+                        assert status['read_spaces'] == status['write_spaces'] == ['*'] and status['admin'] is False
                         body = "  原样内容\r\n\r\n```text\r\n    保留缩进\r\n```\r\n  "
                         request = str(uuid4())
                         args = {'title':'原样笔记','body':body,'space':'inbox','request_id':request}
@@ -74,9 +76,11 @@ def main():
                         assert payload(await client.call_tool('capture_note',args))['id']==note['id']
                         assert payload(await client.call_tool('read_note',{'note_id':note['id']}))['body']==body
                         summary = payload(await client.call_tool('capture_note',{'title':'自由总结','body':'讨论重点是保留内容原貌。下一步再补充例子。',
-                            'space':'inbox','request_id':str(uuid4()),'source_type':'summary','source_ids':[note['id']]}))
+                            'space':'project-future','request_id':str(uuid4()),'source_type':'summary','source_ids':[note['id']]}))
                         saved = payload(await client.call_tool('read_note',{'note_id':summary['id']}))
                         assert saved['source_type']=='summary' and saved['source_ids']==[note['id']]
+                        found = payload(await client.call_tool('search_notes', {'query':'讨论重点'}))
+                        assert any(row['note_id'] == summary['id'] for row in found['results'])
                         assert payload(await client.call_tool('search_notes',{'query':'原样'}))['results']
                         files = list((root/'knowledge_workspace/vault').rglob('*.md'))
                         assert len(files)==2
@@ -87,7 +91,8 @@ def main():
             asyncio.run(scenario())
         report={'passed':True,'image':image,'launcher':str(launcher),'external_model_calls':0,
                 'checks':['cached launcher','tool discovery','initial off','no admin tools','verbatim bytes',
-                          'idempotent retry','freeform summary','source linkage','search','host persistence','off blocks writes']}
+                          'idempotent retry','freeform summary','source linkage','search','host persistence','off blocks writes',
+                          'separate wildcard scopes', 'future space cross-scope search']}
         (ROOT/'output/plugin-smoke.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
         print(json.dumps(report,ensure_ascii=False,indent=2))
     finally:

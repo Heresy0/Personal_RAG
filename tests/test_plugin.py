@@ -38,6 +38,9 @@ def test_installer_and_cached_launcher(tmp_path):
     assert Path(settings['projectRoot']) == root and settings['connection'] == 'plugin-memory'
     policy = (root / 'config/connections/plugin-memory.toml').read_text(encoding='utf-8')
     assert 'initial_mode = "off"' in policy and 'admin = false' in policy
+    import tomllib
+    parsed = tomllib.loads(policy)
+    assert parsed['read_spaces'] == ['*'] and parsed['write_spaces'] == ['*']
     # A second run must preserve an explicitly narrowed existing policy.
     narrow = 'name="custom"\nspaces=["inbox"]\nmaximum_mode="read"\ninitial_mode="off"\nadmin=false'
     (root / 'config/connections/plugin-memory.toml').write_text(narrow, encoding='utf-8')
@@ -54,3 +57,20 @@ def test_launcher_missing_configuration_fails_without_protocol_noise(tmp_path):
     assert result.returncode != 0
     assert result.stdout == ''
     assert 'install-plugin.ps1' in result.stderr
+
+
+def test_installer_separate_scopes_and_readonly(tmp_path):
+    import tomllib
+    root = tmp_path / 'root'
+    (root / 'scripts').mkdir(parents=True)
+    (root / 'scripts/install-plugin.ps1').write_bytes((ROOT / 'scripts/install-plugin.ps1').read_bytes())
+    (root / '.env').write_text('fixture', encoding='utf-8')
+    for name, extra, expected_write in [('separate', ['-ReadSpaces','learning','-WriteSpaces','inbox'], ['inbox']),
+                                        ('reader', ['-ReadOnly'], [])]:
+        result = subprocess.run(['pwsh','-NoProfile','-File',str(root / 'scripts/install-plugin.ps1'),
+            '-Connection',name,'-SkipRegistration','-ConfigPath',str(root / 'plugin.json'), *extra],
+            capture_output=True, encoding='utf-8')
+        assert result.returncode == 0, result.stderr
+        data = tomllib.loads((root / f'config/connections/{name}.toml').read_text(encoding='utf-8'))
+        assert data['write_spaces'] == expected_write and data['admin'] is False
+        assert data['read_spaces'] == (['learning'] if name == 'separate' else ['*'])

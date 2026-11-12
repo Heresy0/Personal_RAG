@@ -33,7 +33,9 @@ class MemoryService:
 
     def status(self):
         return {"connection": self.policy.name, "mode": self.mode,
-                "maximum_mode": self.policy.maximum_mode, "spaces": list(self.policy.spaces),
+                "maximum_mode": self.policy.maximum_mode, "spaces": list(self.policy.read_spaces),
+                "read_spaces": list(self.policy.read_spaces), "write_spaces": list(self.policy.write_spaces),
+                "admin": self.policy.admin,
                 "semantic_search": self.embeddings.enabled,
                 "scope": "当前 MCP 连接；其他连接模式独立。关闭不能清除已进入聊天的资料。"}
 
@@ -50,16 +52,17 @@ class MemoryService:
             raise PermissionError("需要专用管理连接")
         if space is not None:
             validate_space(space)
-            if not self.policy.permits(space):
+            if not self.policy.permits(space, write=write):
                 raise PermissionError("当前连接不能访问该资料空间")
 
-    def _scope(self, space=None):
-        self.guard(space=space)
+    def _scope(self, space=None, *, write=False):
+        self.guard(space=space, write=write)
         if space:
             return "n.space = %s", [space]
-        if self.policy.admin and "*" in self.policy.spaces:
+        allowed = self.policy.write_spaces if write else self.policy.read_spaces
+        if "*" in allowed:
             return "TRUE", []
-        return "n.space = ANY(%s)", [list(self.policy.spaces)]
+        return "n.space = ANY(%s)", [list(allowed)]
 
     def _path(self, relative: str):
         root = self.settings.vault.resolve()
@@ -79,8 +82,8 @@ class MemoryService:
         path = self._path(row["relative_path"])
         return path.is_file() and digest(path.read_bytes()) == row["file_hash"]
 
-    def _get(self, conn, note_id, *, deleted=False):
-        where, params = self._scope()
+    def _get(self, conn, note_id, *, deleted=False, write=False):
+        where, params = self._scope(write=write)
         row = conn.execute(f"SELECT n.* FROM notes n WHERE n.id=%s AND {where}" +
                            ("" if deleted else " AND NOT n.deleted"), [UUID(str(note_id)), *params]).fetchone()
         if not row:
@@ -94,6 +97,14 @@ class MemoryService:
         if not self._current_file(row):
             raise ValueError("原文已变化或缺失，请在管理项目 sync 后读取")
         return self._public(row, body=True)
+
+    def _write_result(self, note_id):
+        with self.db.connect() as conn:
+            row = self._get(conn, note_id, write=True)
+        if self.policy.permits(row['space']):
+            return self.read(str(note_id))
+        return {'id':str(row['id']), 'space':row['space'], 'revision':row['revision'],
+                'citation':f"memory://{row['id']}?revision={row['revision']}"}
 
     def _public(self, row, *, body=False):
         result = {key: row[key] for key in ("id", "space", "title", "tags", "event_date", "created_at",
@@ -181,7 +192,8 @@ class MemoryService:
                 observe_note(existing)
                 if existing["deleted"] or any(existing[k] != row[k] for k in ("space", "title", "body", "tags", "event_date", "source_type", "source_ids")):
                     raise ValueError("request_id 已用于不同内容或已删除记录")
-                return self._public(existing)
+                return self._public(existing) if self.policy.permits(space) else {
+                    'id':str(existing['id']), 'space':space, 'revision':existing['revision']}
             for source in sources:
                 self._get(conn, source)
         prepared = self._prepare(path, body, title)
@@ -210,7 +222,7 @@ class MemoryService:
                     if not check.execute("SELECT id FROM notes WHERE id=%s", [note_id]).fetchone():
                         path.unlink(missing_ok=True)
             raise
-        return self.read(str(note_id))
+        return self._write_result(str(note_id))
 
     @audited_write('append')
     def append(self, note_id: str, text: str, expected_revision: int):
@@ -218,7 +230,7 @@ class MemoryService:
         if not text.strip() or len(text) > 100000:
             raise ValueError("追加内容须为1到100000字符")
         with self.db.connect() as conn:
-            row = self._get(conn, note_id)
+            row = self._get(conn, note_id, write=True)
         observe_note(row)
         self.guard(write=True, space=row["space"])
         if row["revision"] != expected_revision or not self._current_file(row):
@@ -236,7 +248,7 @@ class MemoryService:
         try:
             with self.db.connect() as conn:
                 conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(row["id"])])
-                current = self._get(conn, note_id)
+                current = self._get(conn, note_id, write=True)
                 observe_note(current)
                 if current["revision"] != expected_revision or not self._current_file(current):
                     raise ValueError("并发修改，请先重新读取")
@@ -248,11 +260,11 @@ class MemoryService:
         except Exception:
             if wrote:
                 with self.db.connect() as check:
-                    current = self._get(check, note_id)
+                    current = self._get(check, note_id, write=True)
                     if current["revision"] == expected_revision:
                         self._atomic_write(path, original)
             raise
-        return self.read(note_id)
+        return self._write_result(note_id)
 
     def search(self, query: str, *, space=None, start=None, end=None, limit=6):
         where, params = self._scope(space)
@@ -329,7 +341,7 @@ class MemoryService:
             except Exception as error:
                 report["errors"].append({"path": str(path.relative_to(root)), "error": type(error).__name__, "message": str(error) if isinstance(error, (ValueError, PermissionError)) else "索引失败，请检查本地配置"})
         if prune and not report["errors"]:
-            where, params = self._scope()
+            where, params = self._scope(write=True)
             with self.db.connect() as conn:
                 rows = conn.execute(f"SELECT n.id FROM notes n WHERE {where} AND NOT n.deleted", params).fetchall()
             for row in rows:
@@ -345,7 +357,7 @@ class MemoryService:
         self.guard(write=True, admin=True)
         with self.db.connect() as conn:
             conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(UUID(note_id))])
-            row = self._get(conn, note_id)
+            row = self._get(conn, note_id, write=True)
             observe_note(row)
             if self._path(row['relative_path']).exists():
                 return False
@@ -435,7 +447,7 @@ class MemoryService:
         try:
             with self.db.connect() as conn:
                 conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", [str(UUID(note_id))])
-                row = self._get(conn, note_id)
+                row = self._get(conn, note_id, write=True)
                 observe_note(row)
                 if row["revision"] != expected_revision or not self._current_file(row):
                     raise ValueError("版本冲突，请先读取原文")
@@ -450,7 +462,7 @@ class MemoryService:
         except Exception:
             if moved:
                 with self.db.connect() as check:
-                    current = self._get(check, note_id, deleted=True)
+                    current = self._get(check, note_id, deleted=True, write=True)
                     if not current["deleted"]:
                         os.replace(trash, original)
             raise
@@ -458,7 +470,7 @@ class MemoryService:
 
     def list_audit(self, *, note_id=None, operation_id=None, outcome=None, limit=50, offset=0):
         self.guard(admin=True)
-        if '*' not in self.policy.spaces:
+        if '*' not in self.policy.read_spaces:
             raise PermissionError('全局审计需要全空间管理权限')
         if not 1 <= limit <= 200 or offset < 0:
             raise ValueError('审计分页参数无效')
@@ -486,7 +498,7 @@ class MemoryService:
 
     def read_version(self, note_id, revision):
         self.guard(admin=True)
-        if '*' not in self.policy.spaces:
+        if '*' not in self.policy.read_spaces:
             raise PermissionError('历史版本需要全空间管理权限')
         if type(revision) is not int or revision < 1:
             raise ValueError('版本号须为正整数')
