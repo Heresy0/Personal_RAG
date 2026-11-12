@@ -1,15 +1,19 @@
 # Requires Docker Desktop / Compose and PowerShell 7; no host Python needed.
 [CmdletBinding()]
-param([switch]$SkipBuild)
+param([switch]$Build, [switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'docker-common.ps1')
 $ragRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $ragRoot
 Initialize-RagDockerEnvironment -RagRoot $ragRoot
 $ragCompose = @('compose', '-f', 'compose.yaml', '-f', 'compose.docker.yaml')
-if (-not $SkipBuild) {
+if ($Build -and $SkipBuild) { throw '-Build 与 -SkipBuild 不能同时使用' }
+if ($Build) {
     & docker @ragCompose build mcp
     if ($LASTEXITCODE -ne 0) { throw 'MCP 镜像构建失败' }
+} elseif (-not $SkipBuild) {
+    & docker @ragCompose pull mcp
+    if ($LASTEXITCODE -ne 0) { throw 'MCP 镜像拉取失败，请检查网络及镜像版本' }
 }
 & docker @ragCompose up -d --wait postgres
 if ($LASTEXITCODE -ne 0) { throw '独立数据库启动失败' }

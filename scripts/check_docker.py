@@ -30,7 +30,8 @@ def main():
     admin_url = urlunsplit(parsed._replace(path="/postgres"))
     with psycopg.connect(admin_url, autocommit=True) as conn:
         conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
-    environment = dict(os.environ, PERSONAL_RAG_DATABASE_URL=urlunsplit(parsed._replace(
+    image = os.environ.get("PERSONAL_RAG_TEST_IMAGE", "personal-rag:0.1.0")
+    environment = dict(os.environ, PERSONAL_RAG_IMAGE=image, PERSONAL_RAG_DATABASE_URL=urlunsplit(parsed._replace(
         netloc=parsed.netloc.rsplit("@", 1)[0] + "@postgres:5432", path="/" + name)))
     base = ["compose", "--project-directory", str(ROOT), "-f", str(ROOT / "compose.yaml"),
             "-f", str(ROOT / "compose.docker.yaml"), "run", "--rm", "--no-deps", "-T",
@@ -83,7 +84,7 @@ def main():
 
             asyncio.run(manager_scenario())
             asyncio.run(reader_scenario())
-        report = {"passed": True, "image": "personal-rag:0.1.0", "transport": "compose run / stdio",
+        report = {"passed": True, "image": image, "transport": "compose run / stdio",
                   "checks": ["db initialization", "MCP handshake", "capture", "search", "read", "append",
                              "host volume persistence", "off mode", "readonly tools", "mode ceiling", "space isolation"],
                   "external_model_calls": 0}

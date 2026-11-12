@@ -10,7 +10,15 @@
 .\scripts\setup-docker.ps1
 ```
 
-脚本构建 `personal-rag:0.1.0` 镜像，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话。
+脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.1.0`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
+
+也可单独拉取：
+
+```powershell
+docker pull ghcr.io/heresy0/personal_rag:0.1.0
+```
+
+需要本地构建时使用 `.\scripts\setup-docker.ps1 -Build`。可在 `.env` 中设置 `PERSONAL_RAG_IMAGE` 指定其他镜像或固定digest。
 
 容器保留 STDIO MCP：Codex 执行 `docker compose run --rm --no-deps -T mcp ...`；PostgreSQL 常驻，MCP 容器随连接启动，连接结束后删除。普通使用无需把 MCP 服务暴露到网络端口。
 
@@ -29,17 +37,18 @@
 
 ```powershell
 docker load -i personal-rag-0.1.0-linux-amd64.tar.gz
+$env:PERSONAL_RAG_IMAGE = 'personal-rag:0.1.0'
 .\scripts\setup-docker.ps1 -SkipBuild
 ```
 
-镜像文件仅包含应用，仍需本仓库的 Compose、配置模板和管理说明；PostgreSQL 镜像首次启动时单独拉取。当前导出验收平台为 Linux/amd64（Windows Docker Desktop 使用 Linux 容器）。镜像尚未发布到公共镜像仓库。
+镜像文件仅包含应用，仍需本仓库的 Compose、配置模板和管理说明；PostgreSQL 镜像首次启动时单独拉取。当前导出验收平台为 Linux/amd64（Windows Docker Desktop 使用 Linux 容器）。公开镜像和版本见 [GitHub Packages](https://github.com/Heresy0/Personal_RAG/pkgs/container/personal_rag)。
 
 macOS/Linux 可手动创建 `.env`（参考模板，填写随机数据库密码及一致的 DATABASE_URL）后运行：
 
 ```sh
 mkdir -p knowledge_workspace/vault
 # Linux 绑定目录需匹配宿主机 UID/GID；可在 .env 设置 PERSONAL_RAG_UID/GID。
-docker compose -f compose.yaml -f compose.docker.yaml build mcp
+docker compose -f compose.yaml -f compose.docker.yaml pull mcp
 docker compose -f compose.yaml -f compose.docker.yaml up -d --wait postgres
 docker compose -f compose.yaml -f compose.docker.yaml run --rm --no-deps -T mcp init
 ```

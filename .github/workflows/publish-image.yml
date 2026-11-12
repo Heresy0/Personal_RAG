@@ -1,0 +1,61 @@
+name: Publish GHCR image
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image version, e.g. 0.1.0"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ghcr-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE: ghcr.io/heresy0/personal_rag
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Validate version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version || github.ref_name }}
+        shell: bash
+        run: |
+          version="${REQUESTED_VERSION#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a semantic version like 0.1.0" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: Build and verify application image
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" --tag "$IMAGE:sha-$GITHUB_SHA" .
+          docker run --rm --entrypoint python "$IMAGE:$VERSION" -m pip check
+          docker run --rm --entrypoint python "$IMAGE:$VERSION" -c "import os; from pathlib import Path; from personal_rag.mcp_server import create_server; assert os.getuid()!=0; assert not Path('/app/.env').exists(); assert not Path('/app/knowledge_workspace').exists(); print('MCP import and image boundaries verified')"
+      - name: Publish to GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_ACTOR" --password-stdin
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker logout ghcr.io

@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.source="https://github.com/Heresy0/Personal_RAG" \
+      org.opencontainers.image.description="Personal knowledge base and optional MCP long-term memory"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
     PYTHONDONTWRITEBYTECODE=1 \

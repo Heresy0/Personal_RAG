@@ -2,7 +2,7 @@
 # Existing PostgreSQL service, port and volume are reused without changes.
 services:
   mcp:
-    image: personal-rag:0.1.0
+    image: ${PERSONAL_RAG_IMAGE:-ghcr.io/heresy0/personal_rag:0.1.0}
     build:
       context: .
       dockerfile: Dockerfile
