@@ -56,7 +56,7 @@ def create_server(service: MemoryService):
                          event_date: str | None = None, tags: list[str] | None = None,
                          source_type: Literal["original", "summary"] = "original",
                          source_ids: list[str] | None = None) -> dict:
-            """用户要求时记录笔记；request_id 为新 UUID，失败重试沿用。AI整理标summary并附source_ids。"""
+            """保存自由格式正文，保留原样空白换行。request_id为UUID，重试沿用。原样用original，AI总结用summary；source_ids只填已有笔记ID。"""
             return call(service.capture, title, body, space, request_id=request_id,
                         event_date=event_date, tags=tags, source_type=source_type, source_ids=source_ids)
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "个人知识库"
+  short_description: "按需查询个人记录、原样保存内容，或自由总结当前讨论后存入知识库"
+  default_prompt: "使用 $personal-memory 查询相关记录，或按我的要求保存内容。"

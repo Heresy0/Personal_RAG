@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "personal-memory",
+  "version": "0.2.0",
+  "description": "查询个人知识库、原样保存内容，或自由总结后存入。",
+  "author": {"name": "Heresy0"},
+  "repository": "https://github.com/Heresy0/Personal_RAG",
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "个人知识库",
+        "shortDescription": "查询、原样保存、总结后存入",
+        "longDescription": "在任意本地项目会话中按需查询个人记录、保留原文，或自然总结后存入自己的知识库。无需固定模板，由本机Docker MCP服务执行。",
+        "developerName": "Heresy0",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://github.com/Heresy0/Personal_RAG",
+        "composerIcon": "./assets/icon.svg",
+        "logo": "./assets/icon.svg",
+        "defaultPrompt": ["查询我以前记录的相关内容。", "把这段内容原样存入知识库。", "总结刚才的讨论并存入知识库，不用固定模板。"]
+      }
+    }
+  }
+}

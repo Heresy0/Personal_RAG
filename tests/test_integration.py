@@ -42,6 +42,19 @@ def test_retries_are_idempotent(manager):
         manager.capture("记录", "不同正文", "general", request_id=request)
 
 
+def test_verbatim_save_keeps_whitespace_newlines_and_sync(manager):
+    body = "  原样保存\r\n\r\n```python\r\n    print('hello')\r\n```\r\n  "
+    note = manager.capture("原样", body, "inbox")
+    assert manager.read(note["id"])["body"] == body
+    data = Path(note["path"]).read_bytes()
+    assert data.split(b'\n', 1)[1] == body.encode('utf-8')
+    # A filename change forces sync, preserving the exact body in the DB too.
+    path = Path(note["path"])
+    path.rename(path.with_name('renamed.md'))
+    assert manager.sync()["indexed"] == 1
+    assert manager.read(note["id"])["body"] == body
+
+
 def test_scope_applies_before_both_search_channels(manager, db_settings):
     public = manager.capture("学习", "Python 装饰器", "general")
     secret = manager.capture("私人", "Python 装饰器秘密", "life")

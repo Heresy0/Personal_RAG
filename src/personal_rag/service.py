@@ -158,8 +158,8 @@ class MemoryService:
                 tags: list[str] | None = None, source_type="original", source_ids: list[str] | None = None,
                 request_id: str | None = None):
         self.guard(write=True, space=space)
-        title, body = title.strip(), body.strip()
-        if not title or len(title) > 200 or not body or len(body) > 200000:
+        title = title.strip()
+        if not title or len(title) > 200 or not body.strip() or len(body) > 200000:
             raise ValueError("标题须为1到200字符，正文须为1到200000字符")
         if source_type not in {"original", "summary"}:
             raise ValueError("source_type 只能为 original 或 summary")

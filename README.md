@@ -2,6 +2,43 @@
 
 个人知识库与可选 MCP 长期记忆。PostgreSQL + pgvector 保存元数据、历史版本、父子分块和向量；Markdown 保存原文，Codex 负责理解和回答。
 
+## 在其他项目会话中选择插件
+
+已提供本地桌面插件 **个人知识库 / Personal Memory**，支持查询、原样保存和总结后存入。总结内容不设固定模板，学习、工作、生活都使用同一入口。
+
+先在PowerShell 7中初始化后端，再安装：
+
+```powershell
+.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.2.0
+.\scripts\install-plugin.ps1
+```
+
+安装脚本会通过 `codex plugin marketplace add` 注册本仓库插件源，再安装 `personal-memory@personal-rag`。需要Codex CLI可用（桌面端附带的CLI也可以）；CLI未在PATH中时，可使用其绝对路径，或先配置本机路径，再从桌面插件目录添加本仓库插件源。
+
+重启Codex或新开本地项目会话，在输入框 **＋号/插件选择器** 中搜索 **个人知识库**；也可使用插件/技能提及入口。客户端若尚未刷新目录，先到插件页检查 Personal RAG 来源下是否已安装。此插件通过个人/仓库插件源分发，未提交通用公共插件目录审核。
+
+直接说：
+
+- “查询我以前记录的相关内容。”
+- “把这段内容原样存下来。”
+- “总结刚才的讨论并存入知识库，不用固定模板。”
+
+原样保存保留正文空白、换行和代码，标题/时间等作为独立元数据。总结由当前Codex完成，标记为summary；仅说“总结一下”时不会写入。保存成功才返回笔记ID，失败不会冒称成功。
+
+普通插件连接初始off，最高读写，默认允许general、inbox、learning、work、life；没有管理工具。明确的查询或保存请求可临时开启所需模式，完成后恢复原模式，除非用户要求持续开启。插件选择本身不授权自动保存聊天。
+
+本机路径配置位于 `%USERPROFILE%/.config/personal-rag/plugin.json`，只保存知识库目录和连接名称，不含密钥。插件即使安装到Codex缓存目录，也能找到自己的后端；不依赖当前开发项目路径。不需要在每个项目复制MCP配置。
+
+限制到更少资料空间或只读时，可在首次安装指定：
+
+```powershell
+.\scripts\install-plugin.ps1 -Spaces general,inbox -ReadOnly
+```
+
+重复安装保留已有连接权限；可编辑 `config/connections/plugin-memory.toml` 调整本机允许空间，重启连接后生效。默认不包含project-*空间，需要时明确加入。此范围按连接控制，不自动猜测当前会话属于哪个项目；同一MCP进程共享模式。
+
+插件入口在 `plugins/personal-memory`，目录清单在 `.agents/plugins/marketplace.json`。朋友可克隆仓库执行相同安装步骤；每个人使用自己的数据库、笔记和模型配置，不共享作者的个人知识库。
+
 ## Docker 安装（无需本机 Python）
 
 准备 Docker Desktop、PowerShell 7 和 Codex。克隆或下载本仓库后，在项目根目录执行：
@@ -10,12 +47,12 @@
 .\scripts\setup-docker.ps1
 ```
 
-脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.1.0`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
+脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.2.0`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
 
 也可单独拉取：
 
 ```powershell
-docker pull ghcr.io/heresy0/personal_rag:0.1.0
+docker pull ghcr.io/heresy0/personal_rag:0.2.0
 ```
 
 需要本地构建时使用 `.\scripts\setup-docker.ps1 -Build`。可在 `.env` 中设置 `PERSONAL_RAG_IMAGE` 指定其他镜像或固定digest。

@@ -77,7 +77,7 @@ def test_note_metadata_roundtrip():
     meta = {"id": str(uuid4()), "space": "learning", "title": "学习"}
     body = "原文\n<!-- 普通注释 -->"
     assert decode_note(encode_note(meta, body)) == (meta, body)
-    assert decode_note(encode_note(meta, body).replace("\n", "\r\n")) == (meta, body)
+    assert decode_note(encode_note(meta, body).replace("\n", "\r\n")) == (meta, body.replace("\n", "\r\n"))
 
 
 def test_chinese_keywords_preserve_identifiers():

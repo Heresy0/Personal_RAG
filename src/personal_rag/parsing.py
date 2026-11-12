@@ -14,9 +14,9 @@ HEADER = "<!-- personal-rag "
 
 
 def decode_note(text: str):
-    text = text.replace("\r\n", "\n")
     if text.startswith(HEADER):
         first, _, body = text.partition("\n")
+        first = first.removesuffix("\r")
         if not first.endswith(" -->"):
             raise ValueError("笔记元数据头损坏")
         return json.loads(first[len(HEADER):-4]), body
