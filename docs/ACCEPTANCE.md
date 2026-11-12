@@ -4,6 +4,8 @@
 - 每批改为最多10段；增加安全EmbeddingRequestError，经MCP返回HTTP状态码和本批数量，不包含接口响应正文、密钥或原文，不自动重试或降级关键词保存。
 - 61项完整回归通过。新测试模拟供应商拒绝超过10个输入，验证23段分为10+10+3并保留返回顺序，以及HTTP错误提示不泄露供应商响应内容。测试未调用真实模型，未重存用户笔记。
 - 接口依据：[阿里云OpenAI兼容Embedding接口](https://help.aliyun.com/en/model-studio/embedding-interfaces-compatible-with-openai)。
+- 本地补丁镜像通过2项容器内模拟接口测试及14项MCP检查；[GHCR发布43221792565](https://github.com/Heresy0/Personal_RAG/actions/runs/43221792565)成功，版本0.4.1、提交f9eaf97、摘要`sha256:150051206f0e17f1242576ab6226c9193247479845a9f4b08119e06a96890e20`，匿名拉取验证通过。
+- 本机已备份至`output/pre-embedding-fix-20261112-205230/`并升级0.4.1。实际公开镜像再次通过2项批量模拟测试，笔记、索引及原件指纹不变，新启动的非管理插件可查原记录；未停止既有MCP连接，未调用真实模型，未重试用户失败请求。
 
 # 读写空间权限0.4.0验收 · 2026-11-12
 
