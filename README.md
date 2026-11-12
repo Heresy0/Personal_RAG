@@ -2,7 +2,7 @@
 
 个人知识库与可选 MCP 长期记忆。PostgreSQL + pgvector 保存元数据、历史版本、父子分块和向量；Markdown 保存原文，Codex 负责理解和回答。
 
-当前后端版本 **0.4.2**、插件版本 **0.3.1**：支持[关联保存原图与识别文字](docs/IMAGE_NOTES.md)，检索后可通过MCP读取对应原图；不自动OCR。0.4.1修复嵌入批量限制，每批最多10段；0.4.0起读写空间权限独立，普通插件新安装默认全空间读写，保持非管理员。后端镜像与插件包独立升级。
+当前后端版本 **0.5.0**、插件版本 **0.3.1**：新增[QQ与163新邮件增量收集](docs/MAIL_COLLECTOR.md)，首次跳过历史、只读取信，独立进程按需启用。保留[原图与识别文字关联](docs/IMAGE_NOTES.md)、读写空间权限及审计；不自动OCR。后端镜像与插件包独立升级。
 
 ## 在其他项目会话中选择插件
 
@@ -13,7 +13,7 @@
 ```powershell
 git clone https://github.com/Heresy0/Personal_RAG.git
 cd Personal_RAG
-.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.2
+.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.5.0
 .\scripts\install-plugin.ps1
 ```
 
@@ -72,7 +72,7 @@ cd Personal_RAG
 
 ```powershell
 git pull
-.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.2
+.\scripts\setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.5.0
 ```
 
 必须显式指定镜像版本：本机`.env`可能固定了旧的`PERSONAL_RAG_IMAGE`，仅执行git pull不会替换镜像或更新已运行的MCP进程。setup会拉取镜像、执行幂等数据库初始化并更新本机镜像设置，不删除已有数据。
@@ -100,12 +100,22 @@ admin = false
 .\scripts\setup-docker.ps1
 ```
 
-脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.4.2`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
+脚本默认从 GitHub Container Registry 拉取 `ghcr.io/heresy0/personal_rag:0.5.0`，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话，无需自己构建镜像。
+
+## 可选：QQ与163新邮件收集
+
+更新后运行 `.\scripts\setup-mail.ps1`，在本机`config/mail.toml`填写邮箱地址并启用，在.env填写对应客户端授权码。默认不连接邮箱、不启动收集；不要把授权码发到聊天或提交Git。
+
+首次成功运行mail-poll仅记录各账号的INBOX游标，**不导入已有邮件正文**。之后只增量读取新邮件，使用EXAMINE及BODY.PEEK，不改变已读状态；重启保留游标，失败单独重试。原始邮件和附件归档到vault隐藏目录，正文笔记进入inbox；附件正文不自动解析、图片不自动OCR。
+
+收信通过可选的compose.mail.yaml服务常驻，不需要公网域名、不提供SMTP发送，不改变现有MCP插件。具体配置、首次基线、测试新邮件、启动与排错步骤见[邮件收集说明](docs/MAIL_COLLECTOR.md)。
+
+## Docker运行方式
 
 也可单独拉取：
 
 ```powershell
-docker pull ghcr.io/heresy0/personal_rag:0.4.2
+docker pull ghcr.io/heresy0/personal_rag:0.5.0
 ```
 
 需要本地构建时使用 `.\scripts\setup-docker.ps1 -Build`。可在 `.env` 中设置 `PERSONAL_RAG_IMAGE` 指定其他镜像或固定digest。
@@ -236,7 +246,7 @@ rerank 使用完整 `/rerank` 接口地址，接受 `model/query/documents/top_n
 
 0.4.0支持[读写空间权限分离](docs/SPACE_PERMISSIONS.md)：普通插件新安装默认全空间读写，保持admin=false；旧spaces配置继续生效，不自动扩大已有权限。
 
-0.3.0新增[写入审计与历史版本](docs/WRITE_AUDIT.md)：记录知识写入成功、失败、拒绝与前后版本；管理会话可查询，普通项目插件不暴露全库日志。已有部署请先备份，再运行 `scripts/setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.4.2` 完成数据库迁移。
+0.3.0新增[写入审计与历史版本](docs/WRITE_AUDIT.md)：记录知识写入成功、失败、拒绝与前后版本；管理会话可查询，普通项目插件不暴露全库日志。已有部署请先备份，再运行 `scripts/setup-docker.ps1 -Image ghcr.io/heresy0/personal_rag:0.5.0` 完成数据库迁移。
 
 - `notes`：稳定 ID、空间、日期、标签、来源、修订号与文件哈希。
 - `note_versions`：记录写入/同步后的历史正文及元数据。

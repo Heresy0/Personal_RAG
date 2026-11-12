@@ -1,0 +1,24 @@
+# Opt-in collector, outbound IMAP only. No public ports or SMTP.
+services:
+  mail:
+    image: ${PERSONAL_RAG_IMAGE:-ghcr.io/heresy0/personal_rag:0.5.0}
+    profiles: ["mail"]
+    env_file: .env
+    user: "${PERSONAL_RAG_UID:-1000}:${PERSONAL_RAG_GID:-1000}"
+    environment:
+      PERSONAL_RAG_DATABASE_URL: postgresql://personal_rag:${PERSONAL_RAG_DB_PASSWORD}@postgres:5432/personal_rag
+      PERSONAL_RAG_VAULT: /data/vault
+      PERSONAL_RAG_AUDIT_DIR: /data/logs
+      PERSONAL_RAG_MAIL_CONFIG: /config/mail.toml
+    volumes:
+      - ./knowledge_workspace/vault:/data/vault
+      - ./logs:/data/logs
+      - ./config:/config:ro
+    command: ["mail-watch", "--interval", "60"]
+    init: true
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy

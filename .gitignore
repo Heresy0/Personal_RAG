@@ -32,3 +32,4 @@ config/connections/*.toml
 !config/connections/manager.toml
 !config/connections/example-readonly.toml
 .coverage
+config/mail.toml

@@ -29,7 +29,7 @@ def main():
         raise SystemExit('只允许本项目独立数据库')
     name = 'personal_rag_test_plugin_' + uuid4().hex[:10]
     admin = urlunsplit(parsed._replace(path='/postgres'))
-    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.4.2')
+    image = os.environ.get('PERSONAL_RAG_TEST_IMAGE', 'ghcr.io/heresy0/personal_rag:0.5.0')
     launcher = Path(os.environ.get('PERSONAL_RAG_TEST_LAUNCHER',
                     str(ROOT / 'plugins/personal-memory/scripts/start-memory.ps1')))
     assert launcher.is_file()

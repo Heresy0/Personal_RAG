@@ -113,3 +113,39 @@ CREATE TRIGGER personal_rag_note_audit AFTER INSERT OR UPDATE OR DELETE ON notes
 INSERT INTO note_versions(note_id,revision,body,metadata)
     SELECT id,revision,body,to_jsonb(notes)-'body' FROM notes ON CONFLICT DO NOTHING;
 INSERT INTO rag_meta(key,value) VALUES ('audit_schema','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value;
+
+CREATE TABLE IF NOT EXISTS mail_sources (
+    id text PRIMARY KEY,
+    identity_hash text NOT NULL,
+    uidvalidity bigint NOT NULL,
+    baseline_uid bigint NOT NULL,
+    next_uid bigint NOT NULL,
+    enabled_at timestamptz NOT NULL,
+    last_checked_at timestamptz,
+    last_error text
+);
+CREATE TABLE IF NOT EXISTS mail_items (
+    source_id text NOT NULL REFERENCES mail_sources(id),
+    uidvalidity bigint NOT NULL,
+    uid bigint NOT NULL,
+    status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','saved','failed','skipped','missing')),
+    request_id uuid NOT NULL UNIQUE,
+    received_at timestamptz,
+    size_bytes bigint,
+    raw_sha256 text,
+    capture_sha256 text,
+    note_id uuid,
+    attempts integer NOT NULL DEFAULT 0,
+    last_error text,
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY(source_id,uidvalidity,uid)
+);
+CREATE TABLE IF NOT EXISTS mail_events (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_id text NOT NULL,
+    uid bigint,
+    outcome text NOT NULL,
+    error_code text,
+    recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS mail_queue ON mail_items(source_id,status,attempts,uid);

@@ -47,6 +47,11 @@ def main():
     connect.add_argument("--write", action="store_true")
     sub.add_parser("manager-config")
     sub.add_parser("mcp")
+    for mail_command in ('mail-poll','mail-watch','mail-status'):
+        command = sub.add_parser(mail_command)
+        command.add_argument('--config',type=Path)
+        if mail_command == 'mail-watch':
+            command.add_argument('--interval',type=int,default=60)
     args = parser.parse_args()
     try:
         if args.command == "connect":
@@ -60,7 +65,15 @@ def main():
             result = {"path": str(path)}
         else:
             settings = Settings.load()
-            if args.command == "init":
+            if args.command.startswith('mail-'):
+                from .mail import Collector, load_accounts, watch
+                accounts = [] if args.command == 'mail-status' else load_accounts(args.config)
+                collector = Collector(settings,accounts)
+                if args.command == 'mail-watch':
+                    watch(collector,args.interval)
+                    return
+                result = collector.status() if args.command == 'mail-status' else {'accounts':collector.poll()}
+            elif args.command == "init":
                 Database(settings).initialize()
                 result = {"initialized": True}
             else:

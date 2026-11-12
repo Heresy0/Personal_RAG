@@ -1,0 +1,15 @@
+# Copy to config/mail.toml (ignored by Git). Enable only after filling local credentials.
+# id identifies persistent cursors: do not rename or reuse for a different address.
+[[accounts]]
+id = "qq-main"
+provider = "qq"
+username = "YOUR_ACCOUNT@qq.com"
+auth_code_env = "PERSONAL_RAG_MAIL_QQ_AUTH_CODE"
+enabled = false
+
+[[accounts]]
+id = "163-main"
+provider = "163"
+username = "YOUR_ACCOUNT@163.com"
+auth_code_env = "PERSONAL_RAG_MAIL_163_AUTH_CODE"
+enabled = false

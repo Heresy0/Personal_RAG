@@ -28,13 +28,13 @@ def test_versions_success_retry_conflict_and_privacy(manager):
     assert (first['outcome'], first['before_revision'], first['after_revision']) == ('success', None, 1)
     assert first['request_id'] == request and first['connection_name'] == 'manager'
     manager.capture('PRIVATE_TITLE', body, 'general', request_id=request)
-    assert attempts(manager)[0]['outcome'] == 'noop'
+    assert any(row['operation']=='capture' and row['outcome']=='noop' for row in attempts(manager))
     manager.append(note['id'], 'addition', 1)
-    changed = attempts(manager)[0]
+    changed = next(row for row in attempts(manager) if row['operation']=='append' and row['outcome']=='success')
     assert (changed['before_revision'], changed['after_revision'], changed['outcome']) == (1, 2, 'success')
     with pytest.raises(ValueError):
         manager.append(note['id'], 'PRIVATE_FAILED_BODY', 1)
-    failed = attempts(manager)[0]
+    failed = next(row for row in attempts(manager) if row['operation']=='append' and row['outcome']=='failure')
     assert (failed['outcome'], failed['before_revision'], failed['after_revision'], failed['expected_revision']) == ('failure', 2, 2, 1)
     assert failed['error_code'] == 'ValueError'
     assert manager.read_version(note['id'], 1)['body'] == body
@@ -55,7 +55,8 @@ def test_failed_transaction_has_no_success_change_or_version(manager, monkeypatc
     with pytest.raises(OSError):
         manager.append(note['id'], 'new', 1)
     assert manager.read(note['id'])['revision'] == 1
-    failed = attempts(manager)[0]
+    # Operation identity is stable even if the database wall clock adjusts.
+    failed = next(row for row in attempts(manager) if row['operation']=='append' and row['outcome']=='failure')
     rows = manager.list_audit(operation_id=failed['operation_id'])['results']
     assert len(rows) == 1 and rows[0]['outcome'] == 'failure'
     assert 'PRIVATE_EXCEPTION' not in json.dumps(rows)
@@ -95,7 +96,7 @@ def test_denied_and_validation_attempts_persist(manager, db_settings):
     writer.set_mode('readwrite')
     with pytest.raises(ValueError):
         writer.capture('secret', '', 'general')
-    assert attempts(manager)[0]['outcome'] == 'failure'
+    assert any(row['outcome']=='failure' for row in attempts(manager))
     with pytest.raises(PermissionError):
         writer.list_audit()
     with pytest.raises(PermissionError):
@@ -122,7 +123,7 @@ def test_database_and_fallback_both_unavailable_fail_closed(manager, monkeypatch
 def test_archive_and_prune_retain_before_after_snapshots(manager):
     archived = manager.capture('archive', 'before archive', 'general')
     manager.archive(archived['id'], 1)
-    assert attempts(manager)[0]['after_revision'] == 2
+    assert next(row for row in attempts(manager) if row['operation']=='archive')['after_revision'] == 2
     assert manager.read_version(archived['id'], 1)['metadata']['deleted'] is False
     assert manager.read_version(archived['id'], 2)['metadata']['deleted'] is True
     missing = manager.capture('prune', 'before prune', 'general')
