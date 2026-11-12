@@ -4,6 +4,7 @@ param(
     [string[]]$Spaces = @('general', 'inbox', 'learning', 'work', 'life'),
     [switch]$ReadOnly,
     [string]$ConfigPath,
+    [string]$CodexPath,
     [switch]$SkipRegistration
 )
 $ErrorActionPreference = 'Stop'
@@ -39,10 +40,22 @@ if (Test-Path -LiteralPath $ConfigPath) {
 }
 [IO.File]::WriteAllText(([IO.Path]::GetFullPath($ConfigPath)), $ragLocalConfiguration)
 if (-not $SkipRegistration) {
-    if (-not (Get-Command codex -ErrorAction SilentlyContinue)) { throw '未找到 codex CLI。可先用 -SkipRegistration 配置，再从桌面插件目录注册仓库插件源。' }
-    & codex plugin marketplace add $ragRoot --json
+    if (-not $CodexPath) {
+        $ragCodexCommand = Get-Command codex -ErrorAction SilentlyContinue
+        if ($ragCodexCommand) { $CodexPath = $ragCodexCommand.Source }
+    }
+    if (-not $CodexPath -and $env:LOCALAPPDATA) {
+        $ragBundledDirectory = Join-Path $env:LOCALAPPDATA 'OpenAI/Codex/bin'
+        if (Test-Path -LiteralPath $ragBundledDirectory) {
+            $ragBundledCommand = Get-ChildItem -LiteralPath $ragBundledDirectory -Filter codex.exe -Recurse -File |
+                Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+            if ($ragBundledCommand) { $CodexPath = $ragBundledCommand.FullName }
+        }
+    }
+    if (-not $CodexPath) { throw '未找到 codex CLI。可用 -CodexPath 指定，或先用 -SkipRegistration 配置后在桌面插件目录注册仓库源。' }
+    & $CodexPath plugin marketplace add $ragRoot --json
     if ($LASTEXITCODE -ne 0) { throw '插件源注册失败' }
-    & codex plugin add 'personal-memory@personal-rag' --json
+    & $CodexPath plugin add 'personal-memory@personal-rag' --json
     if ($LASTEXITCODE -ne 0) { throw '插件安装失败' }
 }
 Write-Host '个人知识库插件已配置。重启Codex或新开会话，在＋号/插件选择器中搜索“个人知识库”。'

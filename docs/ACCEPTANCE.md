@@ -63,3 +63,16 @@
 - 首次发布在附带attestation的清单阶段被拒绝，失败运行保留：[43195119503](https://github.com/Heresy0/Personal_RAG/actions/runs/43195119503)。调整为明确的Linux/amd64单平台后，[43195519864](https://github.com/Heresy0/Personal_RAG/actions/runs/43195519864) 发布成功。
 - 工作流只在推送v*标签或显式手动触发时发布，使用短期GITHUB_TOKEN及contents:read/packages:write权限，不保存个人访问令牌。
 - 上节“尚未上传公共镜像仓库”是发布前状态；当前使用方式见README的Docker安装。
+
+## 通用插件0.2.0验收 · 2026-11-12
+
+- 新增portable插件 `plugins/personal-memory`，仓库目录源 `.agents/plugins/marketplace.json`；显示名称“个人知识库”，支持查询、原样保存和自由总结后存入，不定义开发/学习/生活固定模板。
+- Codex CLI实际安装成功：`personal-memory@personal-rag`，version=0.2.0，installed=true、enabled=true；实际缓存目录与源码目录分离。
+- 本机用户配置只保存知识库根目录和连接名称；独立plugin-memory连接初始off、非admin，默认general/inbox/learning/work/life，可在本机收窄。安装器重跑保留现有连接权限。
+- 原样保存修正：capture不再strip正文；元数据解码只处理头部CR，正文换行不被归一化。数据库正文与Markdown元数据头之后的正文保留原始UTF-8字节；索引清洗不回写正文。
+- 技能验证通过。完整37项回归通过；安装脚本更新后对应3项再次通过。
+- `scripts/check_plugin.py` 从**已安装的缓存启动脚本**运行，11项真实MCP检查通过：缓存启动、工具发现、初始关闭、无管理工具、原样字节、幂等重试、自由总结、来源关联、查询、宿主机持久化、关闭阻止写入。测试用临时数据库和临时资料目录，外部模型调用0。
+- 镜像 `ghcr.io/heresy0/personal_rag:0.2.0` 已由[43198289475](https://github.com/Heresy0/Personal_RAG/actions/runs/43198289475)发布成功，已实际拉取并用于缓存插件验收；0.2.0匿名镜像清单请求通过。
+- 本机管理入口已切至0.2.0；0.1.0镜像与既有数据保留。未更改原企业项目源码和服务。
+- 插件已完成运行时安装与缓存MCP核验。当前聊天工具目录不会自动刷新；需重启客户端或新开本地会话，从＋号/插件选择器搜索“个人知识库”。本轮未通过操作当前Codex界面确认菜单渲染，不将CLI安装状态冒称为已观察到的UI结果。
+- 通过个人/仓库目录源安装，不代表提交或获批通用公共插件目录。Windows + PowerShell 7 + Docker Desktop为已验收环境。

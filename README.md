@@ -13,7 +13,7 @@
 .\scripts\install-plugin.ps1
 ```
 
-安装脚本会通过 `codex plugin marketplace add` 注册本仓库插件源，再安装 `personal-memory@personal-rag`。需要Codex CLI可用（桌面端附带的CLI也可以）；CLI未在PATH中时，可使用其绝对路径，或先配置本机路径，再从桌面插件目录添加本仓库插件源。
+安装脚本会通过 `codex plugin marketplace add` 注册本仓库插件源，再安装 `personal-memory@personal-rag`。脚本优先查找PATH中的CLI，再查找Windows桌面端附带的CLI；其他位置可通过 `-CodexPath` 指定。也可先用 `-SkipRegistration` 配置本机路径，再从桌面插件目录添加本仓库插件源。
 
 重启Codex或新开本地项目会话，在输入框 **＋号/插件选择器** 中搜索 **个人知识库**；也可使用插件/技能提及入口。客户端若尚未刷新目录，先到插件页检查 Personal RAG 来源下是否已安装。此插件通过个人/仓库插件源分发，未提交通用公共插件目录审核。
 
