@@ -2,6 +2,52 @@
 
 个人知识库与可选 MCP 长期记忆。PostgreSQL + pgvector 保存元数据、历史版本、父子分块和向量；Markdown 保存原文，Codex 负责理解和回答。
 
+## Docker 安装（无需本机 Python）
+
+准备 Docker Desktop、PowerShell 7 和 Codex。克隆或下载本仓库后，在项目根目录执行：
+
+```powershell
+.\scripts\setup-docker.ps1
+```
+
+脚本构建 `personal-rag:0.1.0` 镜像，启动独立 PostgreSQL，初始化数据库并生成 Docker 版管理 MCP 配置。已有管理配置会先备份。然后在 Codex 添加 `knowledge_workspace` 项目并新开会话。
+
+容器保留 STDIO MCP：Codex 执行 `docker compose run --rm --no-deps -T mcp ...`；PostgreSQL 常驻，MCP 容器随连接启动，连接结束后删除。普通使用无需把 MCP 服务暴露到网络端口。
+
+原文持久化在宿主机 `knowledge_workspace/vault`，数据库保存在原有命名卷。镜像构建只允许源码与依赖进入上下文，`.env`、个人资料和本机连接配置都在运行时从宿主机读取，不进入镜像。
+
+给其他项目生成默认关闭的受限连接：
+
+```powershell
+.\scripts\connect-docker.ps1 -Name my-project
+# 如需读写：加 -Write
+```
+
+把生成的 `connections/my-project.codex.toml` 合并到目标项目配置，并合并 `connections/AGENTS.example.md` 的规则。
+
+如果收到已经构建的镜像文件，先导入再跳过构建：
+
+```powershell
+docker load -i personal-rag-0.1.0-linux-amd64.tar.gz
+.\scripts\setup-docker.ps1 -SkipBuild
+```
+
+镜像文件仅包含应用，仍需本仓库的 Compose、配置模板和管理说明；PostgreSQL 镜像首次启动时单独拉取。当前导出验收平台为 Linux/amd64（Windows Docker Desktop 使用 Linux 容器）。镜像尚未发布到公共镜像仓库。
+
+macOS/Linux 可手动创建 `.env`（参考模板，填写随机数据库密码及一致的 DATABASE_URL）后运行：
+
+```sh
+mkdir -p knowledge_workspace/vault
+# Linux 绑定目录需匹配宿主机 UID/GID；可在 .env 设置 PERSONAL_RAG_UID/GID。
+docker compose -f compose.yaml -f compose.docker.yaml build mcp
+docker compose -f compose.yaml -f compose.docker.yaml up -d --wait postgres
+docker compose -f compose.yaml -f compose.docker.yaml run --rm --no-deps -T mcp init
+```
+
+MCP 客户端的 command 为 `docker`，args 使用上述 Compose 文件的绝对路径及 `run --rm --no-deps -T mcp --connection /connections/manager.toml mcp`。macOS/ARM 未在本机验收。
+
+更改 `.env` 的模型配置后重启 MCP 连接即可加载。已录入的笔记需要运行容器版 `sync` 补建向量。容器返回的原文路径为 `/data/vault/...`，宿主机对应 `knowledge_workspace/vault/...`；按 note_id 调用 read_note 获取全文。
+
 从 `D:/code/Enterprise_knowladge` 只读提取通用解析、保守清洗、中文分词，并改写 RRF 和父块组织逻辑。没有企业运行时依赖。来源清单见 [EXTRACTION.json](docs/EXTRACTION.json)。
 
 ## 首次启动（Windows / PowerShell 7）

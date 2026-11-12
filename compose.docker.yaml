@@ -1,0 +1,26 @@
+# Overlay: docker compose -f compose.yaml -f compose.docker.yaml ...
+# Existing PostgreSQL service, port and volume are reused without changes.
+services:
+  mcp:
+    image: personal-rag:0.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["tools"]
+    user: "${PERSONAL_RAG_UID:-1000}:${PERSONAL_RAG_GID:-1000}"
+    env_file: .env
+    environment:
+      PERSONAL_RAG_DATABASE_URL: postgresql://personal_rag:${PERSONAL_RAG_DB_PASSWORD}@postgres:5432/personal_rag
+      PERSONAL_RAG_VAULT: /data/vault
+      PERSONAL_RAG_HOME: /app
+    volumes:
+      - ./knowledge_workspace/vault:/data/vault
+      - ./config/connections:/connections:ro
+    stdin_open: true
+    tty: false
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy

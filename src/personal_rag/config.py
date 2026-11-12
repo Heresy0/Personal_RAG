@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(os.environ.get("PERSONAL_RAG_HOME", Path(__file__).resolve().parents[2])).resolve()
 MODES = {"off": 0, "read": 1, "readwrite": 2}
 SPACE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 

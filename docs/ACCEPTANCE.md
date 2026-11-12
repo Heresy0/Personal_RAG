@@ -42,3 +42,14 @@
 其他项目通过 `personal-rag connect <名称>` 生成受限连接，手动合并配置后新开会话。服务端模式按MCP连接/进程隔离；若客户端共享进程则共享模式，不将其宣称为强制聊天ID隔离。
 
 本版没有 Web 界面、OCR、后台监视文件变动或插件市场安装包。人工编辑后使用 sync；笔记软件可直接打开 vault。
+
+## Docker 版补充验收 · 2026-11-12
+
+- 已构建 Linux/amd64 镜像 `personal-rag:0.1.0`；MCP仍使用STDIO，由Codex通过Compose启动。
+- 新增 Dockerfile、严格构建上下文允许清单、Compose覆盖文件、免本机Python安装脚本与跨项目配置脚本。
+- 以非root身份运行；镜像内未包含 `.env`、Git目录、宿主机知识库。依赖检查通过。
+- Docker安装脚本及生成的TOML配置已实际验证；已有管理配置先备份，再生成Docker版配置。
+- 原33项回归通过；`scripts/check_docker.py` 的11项端到端检查通过，包括真实容器STDIO握手、数据库初始化、记录、检索、全文、追加、宿主机持久化、关闭模式、只读工具、权限上限和空间隔离。测试未调用外部模型。
+- 容器验收使用临时数据库与临时挂载目录，结束后清理。首次验收发现Compose 2.31的run -v未覆盖已有挂载；改为明确Compose文件覆盖后通过，遗留的两份合成Markdown及探针已核对内容并清理。
+- 原生管理配置可从 knowledge_workspace/.codex/ 下的备份恢复。Docker版返回容器路径，宿主机原件仍在 knowledge_workspace/vault；可用read_note获取全文。
+- 本机导出脚本为 `scripts/export_image.py`，压缩镜像位于被Git忽略的output；镜像尚未上传公共镜像仓库，macOS/ARM尚未在本机验证。
