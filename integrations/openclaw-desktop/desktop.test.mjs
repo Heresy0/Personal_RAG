@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,appendFileSync,readFileSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
+import {pathToFileURL} from 'node:url';
 import {Queue} from './queue.mjs';
 import {Worker,scan,marker,nativeDependencies} from './worker.mjs';
 import {lookupThread,plain} from './catalog.mjs';
@@ -133,12 +134,13 @@ test('uncertain work needs scoped acknowledgement, never cancellation of desktop
   assert.equal(f.queue.acknowledge(job.id,'test-bot',PEER),true);
   assert.equal(f.queue.get(job.id).state,'reviewed');
 });
-test('authorization requires authenticated owner and matching direct peer',()=>{
+test('global dispatch authenticates the configured direct peer without relying on absent native-binding role flags',()=>{
   const config={commands:{ownerAllowFrom:['openclaw-weixin:'+PEER]}};
   const ctx={channelId:'openclaw-weixin',accountId:'bot',senderId:PEER,conversationId:PEER};
   const event={senderId:PEER,accountId:'bot',senderIsOwner:true,commandAuthorized:true,isGroup:false};
   assert.equal(authorized(config,event,ctx),true);
-  for(const change of [{senderIsOwner:false},{commandAuthorized:undefined},{isGroup:true},{senderId:'Other@im.wechat'},{threadId:'topic'},{accountId:'../../other'}])assert.equal(authorized(config,{...event,...change},ctx),false);
+  assert.equal(authorized(config,{...event,senderIsOwner:undefined,commandAuthorized:undefined},ctx),true);
+  for(const change of [{senderIsOwner:false},{commandAuthorized:false},{isGroup:true},{senderId:'Other@im.wechat'},{threadId:'topic'},{accountId:'../../other'}])assert.equal(authorized(config,{...event,...change},ctx),false);
   assert.equal(authorized(config,event,{...ctx,conversationId:'Other@im.wechat'}),false);
 });
 test('read-only catalog verifies original thread, workspace and rollout boundary',t=>{
@@ -158,16 +160,51 @@ test('plugin persists before acknowledgement and rejects an unauthorized inbound
     registerService:s=>services.push(s),on:(name,fn)=>hooks[name]=fn,registerCommand:c=>commands.push(c),runtime:{}};
   mkdirSync(join(f.root,'state'),{recursive:true});
   writeFileSync(join(f.root,'state/openclaw.json'),JSON.stringify({...config,plugins:{entries:{'personal-rag-desktop':{enabled:true,config:api.pluginConfig}}}}));
+  mkdirSync(join(f.root,'state/openclaw-weixin/accounts'),{recursive:true});
+  writeFileSync(join(f.root,'state/openclaw-weixin/accounts.json'),'["bot"]');
+  writeFileSync(join(f.root,'state/openclaw-weixin/accounts/bot.json'),JSON.stringify({userId:PEER}));
   registerDesktop(api,{dependencies:()=>({ready:async()=>false})});
   await services[0].start();t.after(()=>services[0].stop());
-  const event={content:'  记录原文\n',messageId:'provider-id',senderId:PEER,accountId:'bot',senderIsOwner:true,commandAuthorized:true,isGroup:false};
+  // This is the actual before_dispatch shape: no owner flags, account in context.
+  const event={content:'  记录原文\n',messageId:'provider-id',senderId:PEER,isGroup:false};
   const ctx={channelId:'openclaw-weixin',conversationId:PEER,senderId:PEER,accountId:'bot'};
-  const result=await hooks.inbound_claim(event,ctx);assert.match(result.reply.text,/已落盘/);
+  await hooks.message_received({...event,from:PEER},ctx);
+  const result=await hooks.before_dispatch(event,ctx);assert.match(result.text,/已落盘/);
   const stored=new Queue(join(f.root,'desktop-queue.sqlite'));
   try{assert.equal(stored.list('bot',PEER).length,1);assert.equal(stored.get(stored.list('bot',PEER)[0].id).body,event.content);}finally{stored.close();}
-  assert.deepEqual(await hooks.inbound_claim({...event,senderIsOwner:false},ctx),{handled:true});
-  assert.match((await hooks.inbound_claim(event,ctx)).reply.text,/不重复/);
+  assert.deepEqual(await hooks.before_dispatch({...event,senderId:'Other@im.wechat'},ctx),{handled:true});
+  assert.match((await hooks.before_dispatch(event,ctx)).text,/不重复/);
+  assert.match((await hooks.before_dispatch({...event,messageId:'missing-receipt'},ctx)).text,/未确认入队/);
+  const image={...event,messageId:'image',media:[{path:'image.png'}]};
+  await hooks.message_received({...image,from:PEER},ctx);
+  assert.match((await hooks.before_dispatch(image,ctx)).text,/附件未入队/);
+  const control={...event,messageId:'control',content:'/wxdesk'};
+  await hooks.message_received({...control,from:PEER},ctx);
+  assert.match((await hooks.before_dispatch(control,ctx)).text,new RegExp(THREAD));
   assert.equal(commands[0].requireAuth,true);
+  // Exercise the pinned core's real global hook runner, not just our callback.
+  if(process.env.OPENCLAW_TEST_HOOK_RUNNER){
+    const {t:createHookRunner,u:withAdmission}=await import(pathToFileURL(process.env.OPENCLAW_TEST_HOOK_RUNNER).href);
+    const registry={plugins:[{id:'personal-rag-desktop',status:'loaded'}],typedHooks:Object.entries(hooks).map(([hookName,handler])=>({pluginId:'personal-rag-desktop',hookName,handler,priority:100}))};
+    const runner=createHookRunner(registry);
+    const reply=await runner.runBeforeDispatch(event,withAdmission({...ctx},{prepare:async()=>{}}));
+    assert.equal(reply.handled,true);assert.match(reply.text,/不重复/);
+    assert.equal('reply' in reply,false);
+    if(process.env.OPENCLAW_TEST_MESSAGE_MAPPERS){
+      const m=await import(pathToFileURL(process.env.OPENCLAW_TEST_MESSAGE_MAPPERS).href);
+      const canonical=m.n({Body:event.content,CommandBody:event.content.trim(),From:PEER,To:PEER,AccountId:'bot',
+        OriginatingChannel:'openclaw-weixin',OriginatingTo:PEER,Provider:'openclaw-weixin',ChatType:'direct',MessageSidFull:'mapped-id'});
+      const context=m.l(canonical);
+      assert.equal(context.senderId,undefined); // Tencent does not populate SenderId.
+      await runner.runMessageReceived(m.u(canonical),context);
+      const projected={messageId:canonical.messageId,senderId:canonical.senderId,content:canonical.content,
+        body:canonical.bodyForAgent??canonical.body,channel:canonical.channelId,isGroup:canonical.isGroup};
+      const mappedReply=await runner.runBeforeDispatch(projected,withAdmission({...context},{prepare:async()=>{}}));
+      assert.match(mappedReply.text,/已落盘/);
+      const status=await commands[0].handler({channel:'openclaw-weixin',isAuthorizedSender:true,accountId:'bot',from:PEER,args:''});
+      assert.match(status.text,new RegExp(THREAD));
+    }
+  }
 });
 
 test('cancellation during desktop readiness does not race into execution',async t=>{

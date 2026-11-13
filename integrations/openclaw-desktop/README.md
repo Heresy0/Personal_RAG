@@ -2,6 +2,8 @@
 
 微信是同一条桌面 Codex 会话的输入和回复入口。此插件不运行自己的 Codex App Server，不创建分支；使用 `codex queue --thread UUID --message ...` 投递，并只读匹配原会话日志中的任务结果。电脑端可以继续使用同一条会话。
 
+桌面插件版本 `0.1.1` 使用全局 `message_received` 与 `before_dispatch`：前者取得 SDK 提供的文本和媒体信息，后者在模型调用前接管消息。`inbound_claim` 在当前锁定 OpenClaw 版本中只会投递给原生绑定的插件，不能用作未绑定桌面模式的通用入口。入口同时核对真实微信账号的扫码用户和实时所有者配置，缺失接收元数据时停止处理，不回落到其他模型。上游 SDK 可能规范化文字首尾空白，因此不保证微信文本逐字节保真。
+
 ## 配置
 
 先完成 Docker、个人知识库插件和 `setup-openclaw.ps1` 初始化。在被忽略的 `config/openclaw.local.json` 中设置：
