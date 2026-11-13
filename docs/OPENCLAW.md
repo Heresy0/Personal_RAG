@@ -2,6 +2,10 @@
 
 先按主 README 用 Docker 启动知识库并安装个人知识库插件，再使用下方 Windows 配置脚本接入微信。无需安装包。只需桌面查询、保存或邮件收集时，可以跳过本页。
 
+需要手机和电脑使用同一条桌面聊天、已收到消息落盘、重启后恢复时，选择[桌面原会话模式](../integrations/openclaw-desktop/README.md)：`mode=desktop`，填写 `desktopThreadId` 和 `desktopWorkspace`；模型、工具及权限沿用原会话。可用 `openclaw-autostart.ps1 enable` 配置当前用户登录后自动启动。该模式暂不保证关机期间未收到的微信消息保留。
+
+下面原有 `mode=app-server` 方式继续保留：它使用独立 App Server，不适合与桌面端同时占用同一条原会话。
+
 ## 推荐：配置脚本
 
 前提：Windows、PowerShell 7、Node.js 24+（含 npm）、Python 3.12+，以及已登录自己的 Codex。Docker 数据库应已启动，个人知识库插件应已指向本仓库。脚本不会启动共享 Docker 引擎或安装系统服务。

@@ -30,7 +30,7 @@ if ($Action -eq 'status') {
     $owned = Test-ClawProcessIdentity $context $process
     $ready = $false
     if ($owned) { try { $ready = (Invoke-WebRequest "http://127.0.0.1:$($context.Settings.port)/readyz" -TimeoutSec 3).StatusCode -eq 200 } catch {} }
-    [pscustomobject]@{ ManagedProcess=$owned; Ready=$ready; Port=$context.Settings.port; Runtime=$context.Root }
+    [pscustomobject]@{ ManagedProcess=$owned; Ready=$ready; Mode=$context.Settings.mode; Port=$context.Settings.port; Runtime=$context.Root }
     return
 }
 Assert-ClawStopped $context
@@ -62,7 +62,8 @@ while ([DateTime]::UtcNow -lt $deadline) {
     if ($gateway.HasExited) { throw 'Gateway exited; inspect output/openclaw/logs/gateway.stderr.log.' }
     try {
         if ((Invoke-WebRequest "http://127.0.0.1:$($context.Settings.port)/readyz" -TimeoutSec 2).StatusCode -eq 200) {
-            Write-Host 'Gateway ready. Send a message from your own Weixin; bind existing sessions with /codex bind.'
+            if ($context.Settings.mode -eq 'desktop') { Write-Host 'Desktop queue ready. Original thread is configured locally; /wxdesk shows queue status. Desktop permissions are inherited.' }
+            else { Write-Host 'Gateway ready. Send a message from your own Weixin; bind existing sessions with /codex bind.' }
             return
         }
     } catch {}

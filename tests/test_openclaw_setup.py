@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import sqlite3
 
 import pytest
 
@@ -22,8 +23,12 @@ def project(tmp_path):
         (root/name).mkdir(parents=True, exist_ok=True)
     for relative in ('config/openclaw.example.json','integrations/openclaw-weixin-bindings/openclaw.example.json',
                      'integrations/openclaw-weixin-bindings/apply.py',
-                     'scripts/openclaw_config.py','scripts/openclaw-common.ps1','scripts/setup-openclaw.ps1','scripts/openclaw.ps1'):
+                     'scripts/openclaw_config.py','scripts/openclaw-common.ps1','scripts/setup-openclaw.ps1','scripts/openclaw.ps1',
+                     'scripts/openclaw-autostart.ps1','scripts/openclaw-startup.ps1'):
         shutil.copy2(REPO/relative, root/relative)
+    (root/'integrations/openclaw-desktop').mkdir()
+    for name in ('index.mjs','queue.mjs','catalog.mjs','worker.mjs','package.json','openclaw.plugin.json'):
+        shutil.copy2(REPO/'integrations/openclaw-desktop'/name,root/'integrations/openclaw-desktop'/name)
     claw.initialize(root)
     config = root/'config/openclaw.local.json'
     settings = claw.read(config)
@@ -93,6 +98,50 @@ def test_initialize_never_overwrites_user_settings(project):
     before = (root/'config/openclaw.local.json').read_bytes()
     assert claw.initialize(root) is False
     assert (root/'config/openclaw.local.json').read_bytes() == before
+
+
+def test_desktop_mode_does_not_launch_an_independent_app_server(project):
+    root,exe=project
+    path=root/'config/openclaw.local.json';value=claw.read(path)
+    value.update(mode='desktop',model='',desktopThreadId='11111111-2222-3333-4444-555555555555',desktopWorkspace=str(root))
+    claw.write(path,value)
+    settings=claw.prepare(root,str(exe),str(exe),bootstrap=True)
+    runtime=Path(settings['runtime']);config=claw.read(runtime/'state/openclaw.json')
+    assert 'codex' not in config['plugins']['allow']
+    assert config['plugins']['entries']['codex']=={'enabled':False}
+    assert 'personal-rag-desktop' in config['plugins']['allow']
+    desktop=config['plugins']['entries']['personal-rag-desktop']['config']
+    assert desktop['threadId']==value['desktopThreadId'] and desktop['workspace']==str(root.resolve())
+    assert 'mcp' not in config
+    assert (runtime/'runtime/node_modules/@personal-rag/openclaw-desktop/queue.mjs').is_file()
+
+
+def test_desktop_binding_configuration_is_preserved_across_prepare(project):
+    root,exe=project
+    path=root/'config/openclaw.local.json';value=claw.read(path)
+    value.update(mode='desktop',desktopThreadId='11111111-2222-3333-4444-555555555555',desktopWorkspace=str(root))
+    claw.write(path,value)
+    first=claw.prepare(root,str(exe),str(exe));runtime=Path(first['runtime'])
+    config=claw.read(runtime/'state/openclaw.json');token=config['gateway']['auth']['token']
+    (runtime/'desktop-queue.sqlite').write_bytes(b'queue not modified by setup')
+    claw.prepare(root,str(exe),str(exe))
+    again=claw.read(runtime/'state/openclaw.json')
+    assert again['plugins']['entries']['personal-rag-desktop']['config']['threadId']==value['desktopThreadId']
+    assert again['gateway']['auth']['token']==token
+    assert (runtime/'desktop-queue.sqlite').read_bytes()==b'queue not modified by setup'
+
+
+def test_switching_to_desktop_requires_detaching_native_binding(project):
+    root,runtime=prepared(project)
+    database=runtime/'state/state/openclaw.sqlite';database.parent.mkdir(parents=True)
+    with sqlite3.connect(database) as connection:
+        connection.execute('CREATE TABLE current_conversation_bindings(channel TEXT,status TEXT,metadata_json TEXT)')
+        connection.execute('INSERT INTO current_conversation_bindings VALUES(?,?,?)',('openclaw-weixin','active',json.dumps({'pluginId':'codex'})))
+    path=root/'config/openclaw.local.json';value=claw.read(path)
+    value.update(mode='desktop',desktopThreadId='11111111-2222-3333-4444-555555555555',desktopWorkspace=str(root));claw.write(path,value)
+    before=(runtime/'state/openclaw.json').read_bytes()
+    with pytest.raises(ValueError,match='detach'):claw.prepare(root,str(project[1]),str(project[1]))
+    assert (runtime/'state/openclaw.json').read_bytes()==before
 
 
 @pytest.mark.parametrize('relative', ['../elsewhere','output/../config','output','output/openclaw-lab'])
@@ -195,7 +244,7 @@ def test_powershell_argument_arrays_and_environment_restore(project):
 def test_powershell_entry_scripts_parse(project):
     code = '''
     $failed = $false
-    foreach ($file in @('setup-openclaw.ps1','openclaw.ps1','openclaw-common.ps1')) {
+    foreach ($file in @('setup-openclaw.ps1','openclaw.ps1','openclaw-common.ps1','openclaw-autostart.ps1','openclaw-startup.ps1')) {
         $tokens=$null; $parseErrors=$null
         [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) "scripts/$file"),[ref]$tokens,[ref]$parseErrors) | Out-Null
         if ($parseErrors.Count) { $parseErrors | Write-Output; $failed=$true }
@@ -280,4 +329,57 @@ function Stop-Process { param($Id) throw 'Must not stop this process' }
     run_ps('''
     try { & ./scripts/openclaw.ps1 stop; throw 'Expected refusal' }
     catch { if ($_.Exception.Message -notmatch 'identity mismatch') { throw }; Write-Output 'Refused safely' }
+    ''',root)
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows lifecycle entry points')
+def test_start_can_ignore_a_stale_reused_pid_without_stopping_it(project,monkeypatch):
+    root,runtime=prepared(project)
+    (runtime/'gateway.pid').write_text('424242')
+    monkeypatch.setenv('CLAW_TEST_PYTHON',sys.executable)
+    with (root/'scripts/openclaw-common.ps1').open('a',encoding='utf-8') as stream:
+        stream.write('''
+function Get-ClawPython { return $env:CLAW_TEST_PYTHON }
+function Get-Process { param($Id,$ErrorAction) return [pscustomobject]@{Id=$Id} }
+function Get-CimInstance { param($ClassName,$Filter) return [pscustomobject]@{ExecutablePath='C:/other.exe';CommandLine='unrelated'} }
+function Get-NetTCPConnection { param($LocalPort,$State,$ErrorAction) }
+function Stop-Process { throw 'Foreign process must not be stopped' }
+''')
+    run_ps('''
+    . ./scripts/openclaw-common.ps1
+    $context=Get-ClawContext
+    Assert-ClawStopped $context
+    ''',root)
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows Task Scheduler entry point')
+def test_user_logon_task_is_limited_and_can_be_removed_without_stopping_gateway(project,monkeypatch):
+    root,_=prepared(project)
+    monkeypatch.setenv('CLAW_TEST_PYTHON',sys.executable)
+    with (root/'scripts/openclaw-common.ps1').open('a',encoding='utf-8') as stream:
+        stream.write('\nfunction Get-ClawPython { return $env:CLAW_TEST_PYTHON }\n')
+    run_ps('''
+    $global:Registered=$false
+    function New-ScheduledTaskAction { param($Execute,$Argument,$WorkingDirectory)
+        if ($Argument -notmatch '-WindowStyle Hidden' -or $Argument -notmatch '".*openclaw-startup.ps1"') { throw 'Bad startup arguments' }
+        return @{Execute=$Execute;Argument=$Argument}
+    }
+    function New-ScheduledTaskTrigger { param([switch]$AtLogOn,$User)
+        if (-not $AtLogOn -or -not $User) { throw 'Must run after user logon' }; return @{}
+    }
+    function New-ScheduledTaskPrincipal { param($UserId,$LogonType,$RunLevel)
+        if ($LogonType -ne 'Interactive' -or $RunLevel -ne 'Limited') { throw 'Unexpected privileges' }; return @{}
+    }
+    function New-ScheduledTaskSettingsSet { param([switch]$StartWhenAvailable,$MultipleInstances,[switch]$AllowStartIfOnBatteries,[switch]$DontStopIfGoingOnBatteries,$RestartCount,$RestartInterval,$ExecutionTimeLimit)
+        if ($MultipleInstances -ne 'IgnoreNew') { throw 'Duplicate startup permitted' }; return @{}
+    }
+    function Register-ScheduledTask { param($TaskName,$Action,$Trigger,$Principal,$Settings,$Description,[switch]$Force) $global:Registered=$true }
+    function Get-ScheduledTask { param($TaskName,$ErrorAction) if ($global:Registered) { return [pscustomobject]@{TaskName=$TaskName;State='Ready'} } }
+    function Unregister-ScheduledTask { param($TaskName,[switch]$Confirm,$ErrorAction) $global:Registered=$false }
+    function Stop-Process { throw 'Must not stop gateway when removing autostart' }
+    & ./scripts/openclaw-autostart.ps1 enable
+    if (-not $global:Registered) { throw 'Task not registered' }
+    & ./scripts/openclaw-autostart.ps1 status | Out-Null
+    & ./scripts/openclaw-autostart.ps1 disable
+    if ($global:Registered) { throw 'Task not removed' }
     ''',root)

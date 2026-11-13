@@ -5,7 +5,7 @@ param([switch]$InitOnly)
 if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Use PowerShell 7 on Windows.' }
 $initialized = Invoke-ClawConfig -Arguments @('init')
 if ($initialized.created -or $InitOnly) {
-    Write-Host 'Edit config/openclaw.local.json: fill model; codexPath may be empty for automatic discovery.'
+    Write-Host 'Edit config/openclaw.local.json: app-server uses model; desktop uses desktopThreadId and desktopWorkspace.'
     Write-Host 'Then run scripts/setup-openclaw.ps1 again. Existing settings were preserved.'
     return
 }
@@ -60,13 +60,18 @@ foreach ($package in @(@('openclaw','2026.11.3'), @('@tencent-weixin/openclaw-we
 }
 [IO.File]::WriteAllText($dependenciesReceipt,'{"openclaw":"2026.11.3","weixin":"2.4.10"}')
 $receiptPath = Join-Path $context.Root 'codex-install-receipt.json'
-if (-not (Test-Path -LiteralPath $receiptPath)) {
+if ($settings.mode -eq 'app-server' -and -not (Test-Path -LiteralPath $receiptPath)) {
     Invoke-ClawCli -Context $context -Arguments @('plugins','install','@openclaw/codex@2026.11.3','--pin','--accept-capabilities')
     [IO.File]::WriteAllText($receiptPath,'{"version":"2026.11.3"}')
-} elseif ((Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json).version -ne '2026.11.3') {
+} elseif ($settings.mode -eq 'app-server' -and (Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json).version -ne '2026.11.3') {
     throw 'Unexpected Codex plugin version receipt.'
 }
 Invoke-ClawConfig -Arguments @('prepare','--codex-path',$codexPath,'--node-path',$nodePath) | Out-Null
+if ($settings.mode -eq 'desktop') {
+    Write-Warning 'Desktop mode inherits the selected desktop conversation tools and permissions. No project MCP configuration was changed; admin=false is not enforced by queue delivery.'
+    & $context.Node (Join-Path $context.Root 'runtime/node_modules/@personal-rag/openclaw-desktop/catalog.mjs') (Join-Path $context.Root 'state/openclaw.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Selected desktop thread or workspace could not be verified. Existing desktop state was not changed.' }
+}
 $python = Get-ClawPython
 $patch = Join-Path $clawProjectRoot 'integrations/openclaw-weixin-bindings/apply.py'
 $patchArgs = @('--lab-root',$context.Root,'--port',[string]$context.Settings.port)

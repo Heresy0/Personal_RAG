@@ -20,6 +20,8 @@
 
 微信接入：先运行 `scripts/setup-openclaw.ps1` 生成本机配置，填写模型及可选 Codex 路径，再次运行完成安装；之后执行 `scripts/openclaw.ps1 login` 扫码、`scripts/openclaw.ps1 start` 启动。另有 `status` 与 `stop`。需要 Node.js 24+、Python 3.12+ 和已登录的 Codex；默认使用独立的 `output/openclaw` 与端口 `19890`，已有手工实验环境保持原样。完整步骤及验收边界见[微信接入说明](docs/OPENCLAW.md)。
 
+手机与电脑共用原聊天可选[桌面会话投递模式](integrations/openclaw-desktop/README.md)，配置 `mode=desktop`、原会话 ID 和工作目录。提供本机持久队列、去重、执行结果匹配与回传恢复，并支持登录 Windows 后自动启动；不保证关机期间尚未收到的消息。桌面模式继承原会话权限，不等同于独立 MCP 普通连接的权限隔离。
+
 ## 在其他项目会话中选择插件
 
 已提供本地桌面插件 **个人知识库 / Personal Memory**，支持查询、原样保存和总结后存入。总结内容不设固定模板，学习、工作、生活都使用同一入口。

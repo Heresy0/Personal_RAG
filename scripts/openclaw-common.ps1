@@ -60,7 +60,19 @@ function Assert-ClawStopped {
     $pidPath = Join-Path $Context.Root 'gateway.pid'
     if (Test-Path -LiteralPath $pidPath) {
         $recorded = [int](Get-Content -LiteralPath $pidPath -Raw)
-        if (Get-Process -Id $recorded -ErrorAction SilentlyContinue) { throw 'Recorded gateway process still exists; run openclaw.ps1 stop or inspect its identity first.' }
+        if (Get-Process -Id $recorded -ErrorAction SilentlyContinue) {
+            $process = Get-CimInstance Win32_Process -Filter "ProcessId = $recorded"
+            $identityContext = $Context
+            if (-not $Context.Node) {
+                $markerPath = Join-Path $Context.Root 'personal-rag-openclaw.json'
+                if (Test-Path -LiteralPath $markerPath) {
+                    $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+                    $identityContext = @{Node=$marker.nodePath;Entry=(Join-Path $Context.Root 'runtime/node_modules/openclaw/openclaw.mjs')}
+                }
+            }
+            if ($identityContext.Node -and (Test-ClawProcessIdentity $identityContext $process)) { throw 'This managed gateway is still running; stop it before maintenance.' }
+            Write-Warning 'Recorded PID was reused by a different process. It will be left unchanged; checking the configured port.'
+        }
     }
     if (Get-NetTCPConnection -LocalPort $Context.Settings.port -State Listen -ErrorAction SilentlyContinue) {
         throw "Port $($Context.Settings.port) is occupied; no process was stopped."

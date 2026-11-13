@@ -1,6 +1,11 @@
 {
+  "mode": "app-server",
   "model": "",
   "codexPath": "",
   "runtimeDir": "output/openclaw",
-  "port": 19890
+  "port": 19890,
+  "desktopThreadId": "",
+  "desktopWorkspace": "",
+  "desktopCodexHome": "",
+  "desktopAutoOpen": true
 }
