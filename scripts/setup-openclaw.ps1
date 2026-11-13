@@ -79,6 +79,6 @@ if (Test-Path -LiteralPath (Join-Path $context.Root 'bindings-patch.json')) {
     & $python $patch @patchArgs --verify
 } else { & $python $patch @patchArgs --apply }
 if ($LASTEXITCODE -ne 0) { throw 'Adapter verification or application failed.' }
-Invoke-ClawCli -Context $context -Arguments @('plugins','registry','--refresh','--json')
+Invoke-ClawCli -Context $context -Arguments @('plugins','registry','--refresh','--json') | Set-Content -LiteralPath (Join-Path $context.Root 'logs/setup-registry.json') -Encoding utf8
 Write-Host 'Setup complete. Next: scripts/openclaw.ps1 login, then scripts/openclaw.ps1 start.'
 } finally { Restore-ClawEnvironment }

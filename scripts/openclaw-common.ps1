@@ -39,7 +39,8 @@ function Set-ClawEnvironment {
     $env:OPENCLAW_CONFIG_PATH = Join-Path $Context.Root 'state/openclaw.json'
     $env:OPENCLAW_NO_RESPAWN = '1'
     $env:npm_config_cache = Join-Path $Context.Root 'npm-cache'
-    $env:PATH = (Split-Path -Parent $Context.Node) + [IO.Path]::PathSeparator + $env:PATH
+    # Scheduled tasks may not inherit the desktop app's PATH; keep the executing PS7 available to URI delivery.
+    $env:PATH = ((Split-Path -Parent $Context.Node), $PSHOME, $env:PATH) -join [IO.Path]::PathSeparator
 }
 
 function Restore-ClawEnvironment {
