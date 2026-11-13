@@ -68,13 +68,28 @@ def patched(name, data):
     return ''.join(result).encode('utf-8')
 
 def main():
+    global LAB, PLUGIN
     parser = argparse.ArgumentParser()
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--rollback', type=pathlib.Path)
+    parser.add_argument('--lab-root', type=pathlib.Path)
+    parser.add_argument('--port', type=int, default=19889)
+    parser.add_argument('--verify', action='store_true')
     args = parser.parse_args()
+    require(1 <= args.port <= 65535, 'Invalid Gateway port')
+    if args.lab_root:
+        LAB = args.lab_root.resolve()
+        require(LAB.is_relative_to((ROOT/'output').resolve()) and LAB != (ROOT/'output').resolve(), 'Runtime must remain under this project output directory')
+        PLUGIN = LAB/'runtime/node_modules/@tencent-weixin/openclaw-weixin'
+    if args.verify:
+        manifest = json.loads((LAB/'bindings-patch.json').read_text(encoding='utf-8'))
+        require(set(manifest['deployed']) == {*EXPECTED, *NEW_FILES}, 'Unexpected patch manifest')
+        require(all(digest((PLUGIN/name).read_bytes()) == sha for name,sha in manifest['deployed'].items()), 'Patched files changed; inspect before continuing')
+        print('Adapter deployed files verified')
+        return
     with socket.socket() as sock:
         sock.settimeout(1)
-        if sock.connect_ex(('127.0.0.1',19889)) == 0:
+        if sock.connect_ex(('127.0.0.1',args.port)) == 0:
             raise SystemExit('Stop only the experimental Gateway before changing its plugin')
     require(PLUGIN.resolve().is_relative_to(LAB.resolve()), 'Plugin target must remain inside the isolated lab')
     package = json.loads((PLUGIN/'package.json').read_text(encoding='utf-8'))

@@ -14,9 +14,11 @@
 | 个人知识库插件 `0.3.1` | 安装到自己的 Codex，其他项目按需选择 | 推荐 |
 | 知识库管理项目 | 在 Codex 打开 `knowledge_workspace` | 推荐 |
 | QQ / 163 增量邮件采集 | 可选 Compose 服务，见[邮件说明](docs/MAIL_COLLECTOR.md) | 可选 |
-| OpenClaw → Codex → 知识库 | 独立本机运行，见[微信接入说明](docs/OPENCLAW.md) | 可选、进阶 |
+| OpenClaw → Codex → 知识库 | Windows 配置脚本、扫码登录、独立启停，见[微信接入说明](docs/OPENCLAW.md) | 可选 |
 
 建议先完成下面的 Docker 与插件安装，确认查询和保存正常，再启用邮件或微信。组件关系、资料流向和备份边界见[架构说明](docs/ARCHITECTURE.md)。本次新增微信适配器和文档不改变后端镜像；OpenClaw 不包含在知识库 Docker 镜像中。
+
+微信接入：先运行 `scripts/setup-openclaw.ps1` 生成本机配置，填写模型及可选 Codex 路径，再次运行完成安装；之后执行 `scripts/openclaw.ps1 login` 扫码、`scripts/openclaw.ps1 start` 启动。另有 `status` 与 `stop`。需要 Node.js 24+、Python 3.12+ 和已登录的 Codex；默认使用独立的 `output/openclaw` 与端口 `19890`，已有手工实验环境保持原样。完整步骤及验收边界见[微信接入说明](docs/OPENCLAW.md)。
 
 ## 在其他项目会话中选择插件
 

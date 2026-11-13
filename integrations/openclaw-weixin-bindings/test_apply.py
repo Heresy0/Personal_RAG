@@ -87,3 +87,24 @@ def test_node_uses_isolated_binary_or_system_path(installation,monkeypatch):
 def test_missing_node_has_actionable_error(installation,monkeypatch):
     monkeypatch.setattr(patch.shutil,'which',lambda name:None)
     with pytest.raises(ValueError,match='Install Node.js'):patch.node_command()
+
+def test_verify_is_read_only_and_detects_changed_deployment(installation,monkeypatch):
+    lab,plugin,originals=installation
+    backup=stage_rollback(lab,plugin,originals)
+    (lab/'bindings-patch.json').write_bytes((backup/'manifest.json').read_bytes())
+    before={str(p):p.read_bytes() for p in plugin.rglob('*') if p.is_file()}
+    monkeypatch.setattr('sys.argv',['apply.py','--verify'])
+    patch.main()
+    assert {str(p):p.read_bytes() for p in plugin.rglob('*') if p.is_file()}==before
+    (plugin/'dist/src/channel.js').write_bytes(b'changed after installation')
+    with pytest.raises(ValueError,match='changed'):patch.main()
+
+def test_custom_runtime_cannot_leave_project_output(installation,monkeypatch):
+    lab,_,_=installation
+    monkeypatch.setattr(patch,'ROOT',lab.parent/'different-project')
+    monkeypatch.setattr('sys.argv',['apply.py','--lab-root',str(lab.parent/'elsewhere')])
+    with pytest.raises(ValueError,match='output'):patch.main()
+
+def test_invalid_port_is_rejected(installation,monkeypatch):
+    monkeypatch.setattr('sys.argv',['apply.py','--port','0'])
+    with pytest.raises(ValueError,match='port'):patch.main()

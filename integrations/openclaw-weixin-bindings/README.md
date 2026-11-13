@@ -21,6 +21,8 @@
 
 脚本固定操作本仓库忽略目录下的 `output/openclaw-lab/runtime/node_modules/@tencent-weixin/openclaw-weixin`。不修改旧 codex-weixin、Codex 全局配置或已安装的个人知识库插件。
 
+上面是手工环境的默认路径。配置脚本使用独立的 `output/openclaw`，通过 `--lab-root <本仓库output下的目录> --port <端口>` 明确目标。`--verify` 只读核对部署清单与文件指纹，允许在网关运行时检查；应用和回滚仍须停对应网关。其他使用者推荐直接运行仓库的 `scripts/setup-openclaw.ps1` 与 `scripts/openclaw.ps1`，见[配置脚本说明](../../docs/OPENCLAW.md)。
+
 先停止实验 Gateway，再执行：
 
 ```powershell
