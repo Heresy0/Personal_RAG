@@ -1,0 +1,6 @@
+{
+  "name": "personal-rag-weixin-bindings",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test *.test.mjs" }
+}
