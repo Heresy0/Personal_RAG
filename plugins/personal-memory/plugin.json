@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "personal-memory",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "查询个人知识库、原样保存、总结后存入，并关联保存原图与识别文字。",
   "author": {"name": "Heresy0"},
   "repository": "https://github.com/Heresy0/Personal_RAG",

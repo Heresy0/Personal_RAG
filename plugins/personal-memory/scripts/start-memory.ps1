@@ -20,12 +20,8 @@ try {
             throw '本机知识库配置不完整，请先运行 setup-docker.ps1。'
         }
     }
-    # stdout is reserved for MCP JSON-RPC. Docker progress remains on stderr.
-    $ragArguments = @('compose', '--project-directory', $ragProjectRoot,
-        '-f', (Join-Path $ragProjectRoot 'compose.yaml'), '-f', (Join-Path $ragProjectRoot 'compose.docker.yaml'),
-        'run', '--rm', '--no-deps', '-T', 'mcp', '--connection', "/connections/$ragConnectionName.toml", 'mcp')
-    & docker @ragArguments
-    exit $LASTEXITCODE
+    # Keep the host-side MCP transport alive independently of Docker.
+    & (Join-Path $PSScriptRoot 'memory-bridge.ps1') -ProjectRoot $ragProjectRoot -Connection $ragConnectionName
 } catch {
     [Console]::Error.WriteLine($_.Exception.Message)
     exit 1

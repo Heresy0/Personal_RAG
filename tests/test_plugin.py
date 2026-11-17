@@ -17,6 +17,9 @@ def test_plugin_paths_and_portable_stdio():
         assert (root / interface[key]).is_file()
     server = mcp['mcpServers']['personal_memory']
     assert server['type'] == 'stdio' and server['command'] == 'pwsh'
+    # Plugin stdio manifests have a narrower schema than global TOML MCP
+    # config. In the current desktop loader, timeout/required are invalid.
+    assert set(server) <= {'type', 'command', 'args', 'env', 'cwd'}
     script = server['args'][-1].replace('${PLUGIN_ROOT}', str(root))
     assert Path(script).is_file()
     catalog = json.loads((ROOT / '.agents/plugins/marketplace.json').read_text(encoding='utf-8'))
